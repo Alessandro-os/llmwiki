@@ -162,7 +162,6 @@ il nuovo nome e "Salva e prova".
 6. **Misurare** con il banco di prova prima e dopo.
 
 Applicato: 48 GB → IQ2_XS (45,5). 64 GB → IQ3_XXS (53) con margine, IQ3_S (60) a filo.
-Per IQ3_S con il browser aperto servirebbero circa 72 GB.
 
 ## Per un PC senza Strata
 
