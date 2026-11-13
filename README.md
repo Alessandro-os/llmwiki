@@ -13,7 +13,8 @@ Serve a due usi con la stessa app:
 
 ## Per chi la usa
 
-Scarica `LLMWiki-<versione>-windows-x64.zip`, estrailo dove vuoi e apri `LLMWiki.exe`. Le
+Installa con `LLMWiki-<versione>-setup.exe`, oppure scarica `LLMWiki-<versione>-windows-x64.zip`,
+estrailo dove vuoi e apri `LLMWiki.exe`. Le
 istruzioni complete sono in `LEGGIMI.txt` dentro la cartella. In breve: al primo avvio l'app
 crea lo spazio *Personale*, collega da sola il modello locale se ne trova uno acceso, e da
 *Impostazioni* si scarica il decision model, si creano altri spazi (Studio, Lavoro, Azienda) e
@@ -36,6 +37,10 @@ Ogni nodo ricorda l'hash dei suoi figli e viene riscritto solo se sono cambiati.
 **Domande.** Non c'è un grafo precompilato: l'agente parte dalla mappa, scende nelle sintesi e
 nelle schede, cerca per parole chiave, legge le righe originali e segue i rimandi tra documenti
 (`[[link]]` compresi). Per le domande ampie lancia esploratori in parallelo.
+
+Le risposte arrivano a eventi (`/api/ask/stream`): l'interfaccia mostra i passi dell'agente
+mentre avvengono e chiudere la connessione lo ferma. Gli scambi precedenti accompagnano le
+domande di approfondimento e restano nella cronologia dello spazio, separata per persona.
 
 **Verifica delle citazioni** (`src/llmwiki/verify.py`):
 
@@ -118,7 +123,23 @@ uv run llmwiki serve
 Altri comandi: `index`, `ask "domanda"`, `status`, `user add <nome>`, `mcp` (stdio),
 `model install`. Demo senza modello: `uv run llmwiki -c examples/wiki.demo.toml serve`.
 
-Pacchetto distribuibile (cartella `dist/LLMWiki` e zip):
+Banco di prova (decision model, risposte sui documenti di esempio, tenuta con molti documenti):
+
+```bash
+uv run python evals/run.py judge
+```
+
+```bash
+uv run python evals/run.py answers --config percorso/wiki.toml
+```
+
+```bash
+uv run python evals/run.py scale --docs 5000
+```
+
+Pacchetto distribuibile: cartella `dist/LLMWiki`, zip e, se Inno Setup è installato
+(`winget install JRSoftware.InnoSetup`), `LLMWiki-<versione>-setup.exe`. La build collauda
+l'eseguibile prima di impacchettarlo:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1

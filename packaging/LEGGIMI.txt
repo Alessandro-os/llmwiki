@@ -14,7 +14,11 @@ COME SI USA
    che controlla le citazioni.
 4. Carica i documenti dalla scheda Carica, oppure copiali nella cartella dello spazio
    (Impostazioni > Apri la cartella dei documenti). L'indicizzazione parte da sola.
-5. Chiedi.
+5. Chiedi. Mentre risponde vedi cosa sta leggendo; con "Ferma" interrompi la domanda.
+   Puoi fare domande di approfondimento: l'app ricorda gli scambi precedenti dello spazio.
+   "Nuova conversazione" in alto svuota la conversazione.
+6. Clicca su una citazione per vedere il testo su cui è stata verificata, con le righe
+   evidenziate nel documento originale.
 
 SPAZI
 Uno spazio è una raccolta separata di documenti: uno per lo studio, uno per il lavoro, uno

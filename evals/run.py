@@ -3,6 +3,7 @@
   uv run python evals/run.py judge                       decision model NLI (se installato)
   uv run python evals/run.py judge --config wiki.toml    anche il giudice del modello in wiki.toml
   uv run python evals/run.py answers --config wiki.toml  domande end-to-end sui documenti di esempio
+  uv run python evals/run.py scale --docs 5000           tenuta della struttura con molti documenti
 
 `answers` indicizza examples/docs in evals/.work (una volta sola, poi riusa l'indice) con i
 modelli della configurazione indicata, pone le domande di questions.json e controlla che la
@@ -149,6 +150,55 @@ def cmd_answers(args) -> int:
     return 0 if all(r["ok"] for r in results) else 1
 
 
+def cmd_scale(args) -> int:
+    """Quanto pesa la struttura (scansione, albero, ricerca) al crescere dei documenti, con il
+    modello finto: misura il lavoro dell'app, non la velocità del modello."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="llmwiki-scala-", ignore_cleanup_errors=True) as tmp:
+        cfg = Config.from_dict({"llm": {"provider": "mock"}, "verify": {"judge": "llm"},
+                                "index": {"concurrency": 16}}, Path(tmp))
+        per_folder = max(1, args.docs // args.folders)
+        for folder in range(args.folders):
+            target = cfg.docs_dir / f"reparto_{folder:02d}"
+            target.mkdir(parents=True)
+            for n in range(per_folder):
+                (target / f"doc_{n:05d}.md").write_text(
+                    f"# Pratica {folder}-{n}\n\nIl progetto Zefiro{folder}x{n} ha un budget di {1000 + n} euro "
+                    f"e scade il giorno {1 + n % 28} del mese {1 + n % 12}.\n", encoding="utf-8")
+        total = per_folder * args.folders
+
+        async def run() -> None:
+            wiki = Wiki(cfg)
+            started = time.time()
+            status = await wiki.indexer.run_once()
+            first = time.time() - started
+            calls = dict(wiki.llm.calls)
+            print(f"{total} documenti in {args.folders} cartelle: indice in {first:.1f} s · "
+                  f"{status['ready']} pronti, {status['nodes']} nodi, {status['error']} errori · chiamate {calls}")
+            started = time.time()
+            await wiki.indexer.run_once()
+            print(f"seconda passata senza modifiche: {time.time() - started:.1f} s, "
+                  f"chiamate in più {sum(wiki.llm.calls.values()) - sum(calls.values())}")
+            (cfg.docs_dir / "reparto_00" / "nuovo.md").write_text("# Nuovo\n\nDocumento aggiunto dopo.\n", encoding="utf-8")
+            before = dict(wiki.llm.calls)
+            started = time.time()
+            await wiki.indexer.run_once()
+            delta = {k: wiki.llm.calls[k] - before.get(k, 0) for k in wiki.llm.calls if wiki.llm.calls[k] != before.get(k, 0)}
+            print(f"un documento aggiunto: {time.time() - started:.1f} s, chiamate {delta}")
+            started = time.time()
+            hits = wiki.tools.search(f"Zefiro{args.folders - 1}x{per_folder - 1} budget")["results"]
+            print(f"ricerca: {(time.time() - started) * 1000:.0f} ms, primo risultato {hits[0]['doc'] if hits else 'nessuno'}")
+            started = time.time()
+            folder = wiki.tools.list_folder("reparto_00")
+            print(f"apertura cartella da {folder['document_count']} documenti: {(time.time() - started) * 1000:.0f} ms, "
+                  f"{len(folder.get('syntheses', []))} sintesi in cima")
+            await wiki.aclose()
+
+        asyncio.run(run())
+    return 0
+
+
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
@@ -161,8 +211,11 @@ def main() -> int:
     p_answers.add_argument("--config", required=True)
     p_answers.add_argument("--limit", type=int, default=0)
     p_answers.add_argument("--fresh", action="store_true", help="ricostruisce l'indice da zero")
+    p_scale = sub.add_parser("scale")
+    p_scale.add_argument("--docs", type=int, default=2000)
+    p_scale.add_argument("--folders", type=int, default=10)
     args = parser.parse_args()
-    return cmd_judge(args) if args.command == "judge" else cmd_answers(args)
+    return {"judge": cmd_judge, "answers": cmd_answers, "scale": cmd_scale}[args.command](args)
 
 
 if __name__ == "__main__":

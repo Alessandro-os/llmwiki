@@ -1,6 +1,6 @@
 [project]
 name = "llmwiki"
-version = "0.2.0"
+version = "0.3.0"
 description = "LLM wiki ad albero di riassunti: indicizzazione parallela, citazioni verificate, server condiviso e MCP"
 requires-python = ">=3.11"
 dependencies = [
@@ -8,7 +8,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "httpx>=0.27",
-    "mcp>=1.9",
+    "mcp>=2.0",
     "pypdf>=5.0",
     "python-docx>=1.1",
     "python-multipart>=0.0.9",

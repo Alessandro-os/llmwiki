@@ -46,7 +46,10 @@ def extract_lines(path: Path) -> list[str]:
 
 def _read_text(path: Path) -> str:
     data = path.read_bytes()
-    for enc in ("utf-8-sig", "utf-16", "cp1252"):
+    # UTF-16 solo se c'è il BOM: senza, quasi qualunque sequenza di byte "si decodifica"
+    # in UTF-16 e un file Windows-1252 diventerebbe una fila di ideogrammi.
+    encodings = ["utf-16"] if data[:2] in (b"\xff\xfe", b"\xfe\xff") else []
+    for enc in [*encodings, "utf-8-sig", "cp1252"]:
         try:
             return data.decode(enc)
         except UnicodeError:
@@ -58,10 +61,13 @@ def _pdf(path: Path) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
-    parts = []
+    parts, has_text = [], False
     for number, page in enumerate(reader.pages, 1):
         text = page.extract_text() or ""
+        has_text = has_text or bool(text.strip())
         parts.append(f"=== Pagina {number} ===\n{text}")
+    if not has_text:  # solo immagini: senza questo controllo resterebbero i soli numeri di pagina
+        raise ExtractError("nessun testo estraibile (se è una scansione serve un OCR)")
     return "\n\n".join(parts)
 
 
