@@ -22,6 +22,9 @@ si invitano altre persone.
 
 ## Come funziona
 
+Qui sotto c'è il riassunto. La spiegazione completa, passaggio per passaggio, è nella wiki del
+progetto: [docs/README.md](docs/README.md).
+
 | Problema delle LLM wiki classiche | Cosa fa LLMWiki |
 |---|---|
 | Un agente indicizza un documento alla volta | Ogni documento riceve la sua scheda in modo indipendente, in parallelo; se ne possono aggiungere altri mentre l'indicizzazione è in corso |
