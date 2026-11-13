@@ -112,6 +112,33 @@ def test_moved_or_renamed_documents_keep_their_summary(tmp_path):
     asyncio.run(scenario())
 
 
+def test_document_edited_while_being_indexed_is_summarized_again(tmp_path):
+    cfg = make_cfg(tmp_path, watch_seconds=0.2)
+    cfg.docs_dir.mkdir(parents=True)
+    note = cfg.docs_dir / "nota.md"
+    note.write_text("# Nota\n\nIl budget è di 1000 euro.\n", encoding="utf-8")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.llm.delay = 0.5
+        await wiki.indexer.start()
+        await asyncio.sleep(0.25)  # il modello sta leggendo la prima versione
+        note.write_text("# Nota\n\nIl budget è di 2500 euro, approvato a marzo.\n", encoding="utf-8")
+        wiki.indexer.trigger()
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        while wiki.indexer.status()["busy"] or wiki.indexer.status()["ready"] < 1:
+            await asyncio.sleep(0.1)
+            assert loop.time() - started < 20
+        summary = wiki.tools.read_summary("nota.md")
+        assert "2500 euro" in summary and "1000 euro" not in summary
+        assert "2500" in wiki.tools.read_document("nota.md")
+        await wiki.indexer.stop()
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_documents_index_in_parallel_and_can_be_added_meanwhile(tmp_path):
     cfg = make_cfg(tmp_path)
     write_docs(cfg, "a", 12)

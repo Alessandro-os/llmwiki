@@ -197,6 +197,7 @@ class Indexer:
 
     async def _index_doc(self, path: str) -> None:
         async with self._doc_slots:
+            sha = self.store.get_doc(path)["sha"]
             self.store.set_status(path, "indexing")
             try:
                 lines = await asyncio.to_thread(extract_lines, self.store.doc_file(path))
@@ -205,6 +206,14 @@ class Indexer:
                 # Da qui il documento è già cercabile e leggibile, anche senza scheda.
                 await asyncio.to_thread(self.store.index_text, path, lines)
                 body = await self._summarize(path, lines)
+                row = self.store.get_doc(path)
+                if row is None or row["sha"] != sha:
+                    # modificato o cancellato mentre il modello lo leggeva: questa scheda
+                    # descrive un testo che non c'è più
+                    if row is None:
+                        self.store.delete_doc(path)
+                    self._rescan.set()
+                    return
                 summary = f"<!-- documento: {path} · righe: {len(lines)} -->\n{body}\n"
                 self.store.write_atomic(self.store.summary_file(path), summary)
                 await asyncio.to_thread(self.store.index_summary, path, body)

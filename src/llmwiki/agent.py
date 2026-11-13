@@ -110,20 +110,17 @@ class WikiAgent:
                 result.answer = str(final.args.get("answer", "")).strip()
                 result.citations = _parse_citations(final.args.get("citations"))
                 break
+            if last_chance or (nudged and not turn.tool_calls):
+                # già sollecitato a rispondere e ancora niente `answer`: si tiene il testo che c'è
+                result.answer = turn.text or "L'agente non ha prodotto una risposta."
+                result.complete = False
+                break
             if not turn.tool_calls:
-                if nudged or last_chance:
-                    result.answer = turn.text or "L'agente non ha prodotto una risposta."
-                    result.complete = False
-                    break
                 nudged = True
                 turn = await conversation.next(
                     user_text="Consegna la risposta chiamando il tool `answer`, con le citazioni."
                 )
                 continue
-            if last_chance:
-                result.answer = turn.text or "L'agente ha esaurito i passi senza una risposta."
-                result.complete = False
-                break
             outputs = await asyncio.gather(
                 *(self._execute(call, result, emit, explorer) for call in turn.tool_calls))
             if result.steps >= max_steps:
