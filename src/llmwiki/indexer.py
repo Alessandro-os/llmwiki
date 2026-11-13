@@ -101,7 +101,7 @@ class Indexer:
                 self.last_error = f"scansione: {exc}"
             try:
                 await asyncio.wait_for(self._rescan.wait(), timeout=self.cfg.index.watch_seconds)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             self._rescan.clear()
 

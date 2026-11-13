@@ -23,7 +23,21 @@ dependencies = [
 llmwiki = "llmwiki.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pyinstaller>=6.10"]
+dev = ["pytest>=8", "pyinstaller>=6.10", "ruff>=0.8"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E501",                        # righe lunghe: decide il formato, non il linter
+    "RUF001", "RUF002", "RUF003",  # caratteri tipografici italiani nei testi
+    "B008",                        # File(...)/Form(...) di FastAPI negli argomenti
+    "B905",                        # zip senza strict: le liste sono costruite insieme
+    "SIM102", "SIM105", "SIM112", "RUF012",
+]
 
 [build-system]
 requires = ["hatchling"]

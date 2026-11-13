@@ -13,7 +13,7 @@ from llmwiki import apphome, nli
 from llmwiki.app import Hub, Wiki
 from llmwiki.config import Config
 from llmwiki.server import create_app
-from llmwiki.verify import VERIFIED, WARNING, Citation, Verifier
+from llmwiki.verify import VERIFIED, WARNING
 
 LOCAL = {"base_url": "http://127.0.0.1:8765", "client": ("127.0.0.1", 50000)}
 NOTE = "# Carnot\n\nIl rendimento è η = 1 − T_f / T_c e dipende solo dalle due temperature.\n"

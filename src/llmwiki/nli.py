@@ -168,7 +168,7 @@ class NliJudge:
             encoded = [tok.encode(prefix + premise, claim) for premise in premises[start : start + BATCH]]
             width = min(MAX_TOKENS, max(len(e.ids) for e in encoded))
 
-            def padded(rows: list[list[int]]):
+            def padded(rows: list[list[int]], width: int = width):
                 return np.array([row[:width] + [0] * (width - len(row[:width])) for row in rows],
                                 dtype=np.int64)
 

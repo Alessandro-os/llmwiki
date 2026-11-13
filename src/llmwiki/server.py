@@ -261,7 +261,7 @@ def create_app(wiki_or_hub: Wiki | Hub, *, run_indexer: bool = True) -> FastAPI:
                 while True:
                     try:
                         item = await asyncio.wait_for(queue.get(), timeout=15)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield '{"type": "ping"}\n'  # tiene viva la connessione durante le attese lunghe
                         continue
                     if item is None:
@@ -391,7 +391,7 @@ def create_app(wiki_or_hub: Wiki | Hub, *, run_indexer: bool = True) -> FastAPI:
     async def open_folder() -> dict:
         folder = hub.wiki.cfg.docs_dir
         if sys.platform == "win32":
-            os.startfile(folder)  # noqa: S606 - apre la cartella dei documenti in Esplora file
+            os.startfile(folder)
         else:
             subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(folder)])
         return {"opened": str(folder)}

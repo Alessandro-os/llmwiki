@@ -107,7 +107,7 @@ class LLM:
         return confidence, "llm-json"
 
     def conversation(self, *, model: str, system: str, tools: list[dict], user: str,
-                     effort: str = "") -> "Conversation":
+                     effort: str = "") -> Conversation:
         raise NotImplementedError
 
     async def aclose(self) -> None:

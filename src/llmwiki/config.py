@@ -125,7 +125,7 @@ class Config:
     path: Path | None = None
 
     @classmethod
-    def load(cls, path: str | os.PathLike | None = None) -> "Config":
+    def load(cls, path: str | os.PathLike | None = None) -> Config:
         cfg_path = Path(path or os.environ.get("LLMWIKI_CONFIG") or "wiki.toml").resolve()
         data: dict = {}
         if cfg_path.exists():
@@ -168,7 +168,7 @@ class Config:
         os.replace(tmp, self.path)
 
     @classmethod
-    def from_dict(cls, data: dict, root: Path, path: Path | None = None) -> "Config":
+    def from_dict(cls, data: dict, root: Path, path: Path | None = None) -> Config:
         paths = data.get("paths", {})
         cfg = cls(
             root=root,

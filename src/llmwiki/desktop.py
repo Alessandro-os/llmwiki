@@ -87,7 +87,7 @@ def open_window(url: str) -> None:
     for edge in candidates:
         if edge and Path(edge).is_file():
             try:
-                process = subprocess.Popen([edge, f"--app={url}", "--window-size=1320,880"])  # noqa: S603
+                process = subprocess.Popen([edge, f"--app={url}", "--window-size=1320,880"])
             except OSError:
                 continue
             try:  # se Edge è già aperto il processo passa la mano ed esce con 0: va bene così
@@ -209,7 +209,7 @@ def _main(argv: list[str] | None = None) -> int:
             tray = pystray.Icon("LLMWiki", make_icon(64), "LLMWiki", pystray.Menu(
                 pystray.MenuItem("Apri LLMWiki", lambda *_: open_window(url), default=True),
                 pystray.MenuItem("Apri la cartella dei documenti",
-                                 lambda *_: os.startfile(hub.wiki.cfg.docs_dir)),  # noqa: S606
+                                 lambda *_: os.startfile(hub.wiki.cfg.docs_dir)),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Esci", on_quit),
             ))

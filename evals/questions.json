@@ -1,0 +1,24 @@
+{
+  "description": "Domande sui documenti di examples/docs. must_contain: ogni voce deve comparire nella risposta (alternative separate da |). must_cite: documenti che devono comparire tra le citazioni. unanswerable: la risposta non è nei documenti e l'agente deve dirlo.",
+  "questions": [
+    {"question": "Ci sono penali per ritardo nel contratto di fornitura con Acme? Quanto valgono?",
+     "must_contain": ["2%", "10%"], "must_cite": ["contratti/contratto_fornitura_acme.md"]},
+    {"question": "Quanti giorni di ferie ho all'anno e con quanto anticipo vanno chieste?",
+     "must_contain": ["26", "15 giorni"], "must_cite": ["hr/policy_ferie.md"]},
+    {"question": "Qual è il rendimento di una macchina di Carnot tra 500 K e 300 K?",
+     "must_contain": ["0,40|40%|0.40|0,4"], "must_cite": ["appunti/termodinamica/ciclo_di_carnot.md"]},
+    {"question": "Quanto dura l'obbligo di riservatezza con Acme e qual è la penale per violazione?",
+     "must_contain": ["5 anni|cinque anni", "25.000|25000"], "must_cite": ["legale/nda_acme.md"]},
+    {"question": "Entro quanto vengono consegnati gli ordini urgenti e con quale sovrapprezzo?",
+     "must_contain": ["10 giorni", "15%"], "must_cite": ["contratti/allegato_b_sla.md"]},
+    {"question": "Quanto vale cv per un gas biatomico?",
+     "must_contain": ["5/2"], "must_cite": ["appunti/termodinamica/primo_principio.md"]},
+    {"question": "Qual è stato il fatturato del terzo trimestre 2026 e qual è la previsione per il quarto?",
+     "must_contain": ["4,2", "4,6"], "must_cite": ["vendite/report_q3_2026.md"]},
+    {"question": "Il contratto con Acme richiama un accordo di riservatezza: quando è stato firmato e quanto durano i suoi obblighi?",
+     "must_contain": ["3 dicembre 2025", "5 anni|cinque anni"],
+     "must_cite": ["legale/nda_acme.md"]},
+    {"question": "Cosa dicono i documenti sul congedo parentale?",
+     "must_contain": ["non"], "must_cite": [], "unanswerable": true}
+  ]
+}
