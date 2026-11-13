@@ -21,7 +21,7 @@ Tutte le citazioni di una risposta vengono verificate insieme, fino a 8 alla vol
  0. controlli preliminari ───────────── affermazione vuota, documento inesistente ──► ⚠
     │
     ▼
- 1. decision model (NLI, sulla CPU, 100-200 ms) ── confidenza ≥ soglia ──► ✓ verified
+ 1. decision model (NLI, sulla CPU) ────────────── confidenza ≥ soglia ──► ✓ verified
     │ sotto soglia
     ▼
  2. sì/no del modello linguistico ──────────────── confidenza ≥ soglia ──► ✓ verified
@@ -47,9 +47,25 @@ addestrato su 2,7 milioni di coppie in 27 lingue. Non genera testo. Riceve una p
 righe citate) e un'ipotesi (l'affermazione) e restituisce tre probabilità: la premessa
 implica l'ipotesi, è neutra, la contraddice. La confidenza della citazione è la prima.
 
-Gira sul processore con ONNX Runtime, usa circa 1,5 GB di memoria e viene caricato alla prima
-domanda. Non dipende dal modello linguistico collegato: funziona allo stesso modo con Claude,
-con Qwen o con qualunque altro.
+Gira sul processore con ONNX Runtime e non usa la scheda video. Non dipende dal modello
+linguistico collegato: funziona allo stesso modo con Claude, con Qwen o con qualunque altro,
+e convive con un modello locale già caricato.
+
+Risorse, misurate su un Ryzen 5950X con Qwen caricato in Strata nello stesso momento:
+
+| Che cosa | Valore |
+|---|---|
+| Spazio su disco | 1,1 GB |
+| Memoria della scheda video | nessuna |
+| RAM | 1,35 GB a modello caricato, fino a 1,7 GB dopo citazioni lunghe, picco di 1,9 GB durante il caricamento |
+| Processore | fino a 8 thread, solo mentre valuta |
+| Caricamento | circa 4 secondi, alla prima citazione dopo l'avvio dell'app; poi resta in memoria finché l'app è aperta |
+| Una citazione di una o due righe | circa 30 ms |
+| Una citazione di circa 45 frasi | circa 5,6 secondi |
+
+Il tempo cresce con la lunghezza del passaggio, perché crescono i gruppi di frasi da valutare
+(punto 3 qui sotto). Le citazioni lunghe sono soprattutto quelle di assenza, che citano un
+documento intero.
 
 Come viene usato, in dettaglio:
 
@@ -66,7 +82,7 @@ Come viene usato, in dettaglio:
    una finestra o un gruppo di frasi sostenga l'affermazione.
 
 Scelto per misura, su 32 citazioni italiane giuste e sbagliate: nessuna sbagliata accettata,
-nessuna giusta respinta, circa 160 ms l'una. Scartati la versione compressa a 8 bit dello
+nessuna giusta respinta, circa 160 ms l'una in media. Scartati la versione compressa a 8 bit dello
 stesso modello e LettuceDetect v2, entrambi meno accurati sugli stessi casi.
 
 Il suo limite, visto sulle risposte vere di un agente: respinge una parte delle citazioni

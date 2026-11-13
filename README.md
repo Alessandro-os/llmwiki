@@ -47,8 +47,9 @@ domande di approfondimento e restano nella cronologia dello spazio, separata per
 
 **Verifica delle citazioni** (`src/llmwiki/verify.py`):
 
-1. *decision model* dedicato: un modello NLI multilingue che gira sulla CPU in 100–200 ms e
-   dice con che probabilità il testo citato implica l'affermazione;
+1. *decision model* dedicato: un modello NLI multilingue che gira sulla CPU (decine di
+   millisecondi per una citazione di poche righe, qualche secondo per una molto lunga) e dice
+   con che probabilità il testo citato implica l'affermazione;
 2. sui casi sotto soglia, un sì/no del modello linguistico (con i logprob, se il server li
    espone);
 3. se ancora non basta, il modello rilegge il passaggio con più contesto e, se trova il fatto
