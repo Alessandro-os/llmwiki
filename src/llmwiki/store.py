@@ -225,6 +225,25 @@ class Store:
                 (title, summary_sha, time.time(), path),
             )
 
+    def move_doc(self, old: str, new: str, size: int, mtime: float) -> None:
+        """Il documento ha cambiato percorso ma non contenuto: restano testo e scheda."""
+        folder = folder_of(new)
+        summary = self.summary_file(old).read_text(encoding="utf-8")
+        header, _, body = summary.partition("\n")
+        summary = header.replace(f"documento: {old} ", f"documento: {new} ") + "\n" + body
+        for source, target in ((self.text_file(old), self.text_file(new)),
+                               (self.summary_file(old), self.summary_file(new))):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+        self.write_atomic(self.summary_file(new), summary)
+        with self.lock:
+            seq = self.db.execute(
+                "SELECT COALESCE(MAX(seq), -1) + 1 FROM docs WHERE folder=?", (folder,)).fetchone()[0]
+            self.db.execute(
+                "UPDATE docs SET path=?, folder=?, seq=?, size=?, mtime=?, summary_sha=?, updated=?"
+                " WHERE path=?", (new, folder, seq, size, mtime, sha_text(summary), time.time(), old))
+            self.db.execute("UPDATE fts SET path=? WHERE path=?", (new, old))
+
     def delete_doc(self, path: str) -> None:
         with self.lock:
             self.db.execute("DELETE FROM docs WHERE path=?", (path,))

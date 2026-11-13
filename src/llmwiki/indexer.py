@@ -135,8 +135,18 @@ class Indexer:
 
     async def scan(self) -> None:
         changed, removed = await asyncio.to_thread(self._scan_fs)
+        # Un file spostato o rinominato (stesso contenuto, percorso nuovo) si porta dietro
+        # testo e scheda: riordinare le cartelle non costa chiamate al modello.
+        gone = {row["sha"]: row["path"] for row in map(self.store.get_doc, removed)
+                if row and row["status"] == "ready"}
         for path, sha, size, mtime in changed:
-            self.store.upsert_pending(path, sha, size, mtime)
+            old = gone.pop(sha, None)
+            if old and self.store.get_doc(path) is None:
+                self.store.move_doc(old, path, size, mtime)
+                removed.remove(old)
+                self._dirty.set()
+            else:
+                self.store.upsert_pending(path, sha, size, mtime)
         for path in removed:
             task = self._tasks.pop(path, None)
             if task:

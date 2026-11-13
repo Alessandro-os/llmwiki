@@ -87,6 +87,31 @@ def test_tree_is_built_and_updates_incrementally(tmp_path):
     asyncio.run(scenario())
 
 
+def test_moved_or_renamed_documents_keep_their_summary(tmp_path):
+    cfg = make_cfg(tmp_path)
+    (cfg.docs_dir / "bozze").mkdir(parents=True)
+    (cfg.docs_dir / "bozze" / "acme.md").write_text(CONTRACT, encoding="utf-8")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        await wiki.indexer.run_once()
+        before = wiki.llm.calls["doc"]
+        (cfg.docs_dir / "contratti").mkdir()
+        (cfg.docs_dir / "bozze" / "acme.md").rename(cfg.docs_dir / "contratti" / "fornitura_acme.md")
+        status = await wiki.indexer.run_once()
+        assert wiki.llm.calls["doc"] == before          # nessuna scheda riscritta
+        assert status["ready"] == 1 and status["total"] == 1
+        assert wiki.store.get_doc("bozze/acme.md") is None
+        assert "contratti/fornitura_acme.md" in wiki.tools.read_summary("contratti/fornitura_acme.md")
+        assert "penale del 2%" in wiki.tools.read_document("contratti/fornitura_acme.md", 7, 8)
+        hits = wiki.tools.search("penale ritardo")["results"]
+        assert {hit["doc"] for hit in hits} == {"contratti/fornitura_acme.md"}
+        assert wiki.tools.list_folder("")["subfolders"] == ["contratti"]
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_documents_index_in_parallel_and_can_be_added_meanwhile(tmp_path):
     cfg = make_cfg(tmp_path)
     write_docs(cfg, "a", 12)
