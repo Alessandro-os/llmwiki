@@ -11,7 +11,6 @@ import asyncio
 import logging
 import logging.handlers
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -76,28 +75,85 @@ def _free_port(preferred: int) -> int:
     raise RuntimeError("nessuna porta libera")
 
 
+CHROMIUM = ("msedge.exe", "chrome.exe", "brave.exe", "vivaldi.exe", "chromium.exe")
+WINDOW_TITLE = "LLMWiki"
+
+
+def _chromium_browsers() -> list[str]:
+    """Browser capaci di aprire una pagina come finestra d'app (--app=URL): per primo quello
+    predefinito dell'utente, poi Edge, Chrome e Brave nei percorsi consueti."""
+    found: list[str] = []
+    if sys.platform == "win32":
+        import winreg
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\Shell"
+                                r"\Associations\UrlAssociations\http\UserChoice") as key:
+                prog_id = winreg.QueryValueEx(key, "ProgId")[0]
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, prog_id + r"\shell\open\command") as key:
+                command = winreg.QueryValueEx(key, "")[0]
+            exe = command.split('"')[1] if command.startswith('"') else command.split(" ")[0]
+            if Path(exe).name.lower() in CHROMIUM:
+                found.append(exe)
+        except (OSError, IndexError):
+            pass
+    bases = [os.environ.get(name) for name in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")]
+    for relative in (r"Microsoft\Edge\Application\msedge.exe", r"Google\Chrome\Application\chrome.exe",
+                     r"BraveSoftware\Brave-Browser\Application\brave.exe"):
+        found += [str(Path(base) / relative) for base in bases if base]
+    unique = dict.fromkeys(os.path.normcase(path) for path in found if Path(path).is_file())
+    return list(unique)
+
+
+def _find_window() -> int:
+    """Handle della finestra dell'app (una finestra Chromium il cui titolo contiene LLMWiki), o 0."""
+    if sys.platform != "win32":
+        return 0
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def visit(hwnd, _lparam):
+        if user32.IsWindowVisible(hwnd):
+            title = ctypes.create_unicode_buffer(256)
+            kind = ctypes.create_unicode_buffer(64)
+            user32.GetWindowTextW(hwnd, title, 256)
+            user32.GetClassNameW(hwnd, kind, 64)
+            if WINDOW_TITLE.lower() in title.value.lower() and kind.value.startswith("Chrome_WidgetWin"):
+                found.append(hwnd)
+                return False
+        return True
+
+    user32.EnumWindows(visit, 0)
+    return found[0] if found else 0
+
+
 def open_window(url: str) -> None:
-    """Finestra senza barra degli indirizzi (Edge in modalità app, presente su Windows 10/11);
-    altrimenti il browser predefinito."""
-    candidates = [shutil.which("msedge")]
-    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"),
-                 os.environ.get("LOCALAPPDATA")):
-        if base:
-            candidates.append(str(Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe"))
-    for edge in candidates:
-        if edge and Path(edge).is_file():
-            try:
-                process = subprocess.Popen([edge, f"--app={url}", "--window-size=1320,880"])
-            except OSError:
-                continue
-            try:  # se Edge è già aperto il processo passa la mano ed esce con 0: va bene così
-                if process.wait(timeout=2) == 0:
-                    return
-            except subprocess.TimeoutExpired:
-                return  # è rimasto aperto: la finestra è sua
-            log.warning("Edge non ha aperto la finestra (codice %s): uso il browser predefinito",
-                        process.returncode)
-            break
+    """Apre l'interfaccia in una finestra propria, senza barra degli indirizzi. Non si fida
+    del fatto che il browser sia partito: controlla che la finestra esista davvero, e se
+    nessun browser ci riesce apre una scheda normale nel browser predefinito."""
+    hwnd = _find_window()
+    if hwnd:  # già aperta: la si riporta davanti invece di aprirne un'altra
+        import ctypes
+
+        ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+        return
+    for browser in _chromium_browsers():
+        try:
+            subprocess.Popen([browser, f"--app={url}", "--window-size=1320,880"])
+        except OSError:
+            continue
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            if _find_window():
+                return
+            time.sleep(0.4)
+        log.warning("%s non ha aperto la finestra: provo altro", Path(browser).name)
+    log.info("apro l'interfaccia nel browser predefinito")
     webbrowser.open(url)
 
 
@@ -194,8 +250,8 @@ def _main(argv: list[str] | None = None) -> int:
         return 1
     url = f"http://127.0.0.1:{port}"
     log.info("LLMWiki %s su %s (spazio: %s)", __version__, url, space["name"])
-    if not args.no_window:
-        open_window(url)
+    if not args.no_window:  # in un thread: l'attesa della finestra non ritarda l'icona
+        threading.Thread(target=open_window, args=(url,), daemon=True).start()
 
     tray = None
     if not args.no_tray:
