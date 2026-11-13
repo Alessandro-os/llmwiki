@@ -72,3 +72,4 @@ ramo in cui cadono.
 | [8. Impostazioni](08-impostazioni.md) | Tutte le voci di `wiki.toml`, con il valore predefinito e l'effetto |
 | [9. Per chi sviluppa](09-sviluppo.md) | Mappa del codice, test, banco di prova, costruzione dell'installer |
 | [10. Limiti noti](10-limiti-noti.md) | Che cosa l'app non fa o non garantisce oggi |
+| [11. Quale modello locale usare](11-scelta-del-modello.md) | Il ragionamento per scegliere il modello su un dato PC, con i conti da rifare quando cambia l'hardware |
