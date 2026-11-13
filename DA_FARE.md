@@ -27,10 +27,38 @@ decisione; quelle in basso sono sviluppi possibili.
 - [ ] **Firma dell'eseguibile.** Senza un certificato di firma del codice, sugli altri PC
   Windows mostra l'avviso SmartScreen al primo avvio. Il certificato si compra da un'autorità
   di certificazione; serve solo se lo distribuisci a persone che non ti conoscono.
-- [ ] **Guardare l'interfaccia a schermo intero.** Contenuti e impaginazione sono controllati
-  dal codice della pagina, ma un'occhiata umana a colori, spaziature e testi non c'è stata.
-- [ ] **Provare Claude come modello**, se ti interessa: serve una chiave API Anthropic da
-  inserire in Impostazioni. Il codice è provato solo contro un endpoint finto.
+- [ ] **Dare un'occhiata all'interfaccia nuova.** L'ho ridisegnata e controllata a schermo
+  (tema scuro e chiaro, primo avvio, impostazioni, documenti, risposta, fonte), ma il giudizio
+  che conta è il tuo e quello di chi non l'ha mai vista: testi, colori, cosa non si capisce.
+- [ ] **Provare un servizio online** (Claude, OpenAI, Gemini, OpenRouter, Mistral, Groq): serve
+  la chiave del servizio, da incollare in Impostazioni. Il codice è provato contro server
+  finti che ne imitano i comportamenti, non contro i servizi veri. Il più economico per una
+  prova è OpenRouter, che con una chiave dà accesso a molti modelli.
+
+## Consigli per lo sviluppo
+
+In ordine di importanza, secondo me.
+
+1. **Fallo usare a tre persone vere prima di aggiungere altro.** Una che studia, una che
+   lavora con contratti, una che non sa cosa sia un modello. Guardale mentre lo usano senza
+   aiutarle: dove si fermano è il prossimo lavoro da fare, più di qualunque idea nostra.
+2. **Tieni il banco di prova come cancello.** Ogni modifica a prompt, verifica o ricerca si
+   misura con `evals/run.py` prima e dopo. Senza numeri, con i modelli ci si convince
+   facilmente di aver migliorato qualcosa che è peggiorato.
+3. **Allarga il banco di prova con domande tue.** Le mie sono inventate. Venti domande vere
+   sui tuoi documenti, con la risposta giusta scritta da te, valgono più di tutte le mie.
+4. **La velocità è il limite più sentito.** Due minuti a risposta con il modello locale sono
+   tanti. Le leve, dalla più semplice: ragionamento ridotto (già nelle Impostazioni), un
+   modello più piccolo per i riassunti, un servizio online per chi può mandare fuori i dati.
+5. **Decidi presto a chi è rivolto.** Studente singolo e azienda hanno bisogni diversi:
+   l'azienda chiederà permessi per cartella, HTTPS, copie di sicurezza, un registro di chi ha
+   chiesto cosa. Meglio farne bene uno che a metà tutti e due.
+6. **Prima di esporlo in rete fuori casa: HTTPS.** Oggi i token viaggiano in chiaro; va bene
+   su una rete fidata, non altrove.
+7. **Non aggiungere la ricerca per significato finché una misura non la chiede.** Sulla
+   raccolta difficile la ricerca per parole ha trovato il documento giusto 24 volte su 24.
+8. **Scegli licenza e nome definitivo prima di pubblicare**, e firma l'eseguibile se andrà a
+   persone che non ti conoscono.
 
 ## Sviluppi possibili
 

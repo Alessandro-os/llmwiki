@@ -1,5 +1,30 @@
 # Cronologia delle versioni
 
+## 0.4.0 · 2026-11-14
+
+Per chi la usa:
+
+- Interfaccia ridisegnata: tre sezioni (Chiedi, Documenti, Impostazioni), tre passi guidati al
+  primo avvio, linguaggio senza termini tecnici, tema chiaro o scuro secondo il sistema.
+- Il modello acceso sul computer viene trovato da solo e si collega con un clic.
+- Qualunque fornitore dalle Impostazioni: Claude, OpenAI, Gemini, OpenRouter, Mistral, Groq o
+  un altro servizio compatibile; la chiave si incolla una volta e i modelli si scelgono da un
+  elenco. "Salva e prova" dice in chiaro che cosa sa fare il modello scelto.
+- L'app funziona anche con modelli che non sanno usare gli strumenti di ricerca: passa da sola
+  a una modalità compatibile e, se nemmeno quella riesce, cerca al posto del modello.
+- Se il modello si spegne mentre l'app legge i documenti, la lettura aspetta e riprende da
+  sola; i documenti non finiscono più in errore.
+- Con modelli dal contesto piccolo i documenti lunghi vengono letti a pezzi più corti.
+
+Per chi sviluppa:
+
+- `llm.py`: protocollo testuale per gli strumenti (`TextToolConversation`), scelta automatica
+  tra chiamate native e testo, parametri facoltativi di Claude tolti se rifiutati, elenco dei
+  modelli e diagnosi (`probe`).
+- `tests/test_independence.py`: server finti che rifiutano gli strumenti, li ignorano, non
+  rispettano il JSON, hanno poco contesto o si spengono a metà.
+- Nuove impostazioni: `llm.tool_mode`, `llm.context_tokens`.
+
 ## 0.3.1 · 2026-11-14
 
 Per chi la usa:

@@ -6,261 +6,364 @@
 <title>LLMWiki</title>
 <style>
   :root {
-    --bg: #0f0f0e; --panel: #181816; --line: #2c2b27; --text: #ecebe6; --muted: #9b998f;
-    --ok: #5fbf7f; --warn: #e07b53; --accent: #5fbf7f; --chip: #23221f;
-    font-family: system-ui, "Segoe UI", sans-serif;
+    --bg: #f6f5f1; --panel: #ffffff; --soft: #efede7; --line: #dcd9d0; --text: #1d1c19; --muted: #66635b;
+    --accent: #1f7a4a; --accent-text: #ffffff; --ok: #1f7a4a; --ok-bg: #e3f3ea; --warn: #b4481f; --warn-bg: #fbe9e1;
+    font-family: system-ui, "Segoe UI", sans-serif; font-size: 15px; color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121211; --panel: #1b1b19; --soft: #252522; --line: #33322e; --text: #eceae4; --muted: #a09d94;
+      --accent: #5fbf7f; --accent-text: #0b1a10; --ok: #6fcf8f; --ok-bg: #19301f; --warn: #f08a5d; --warn-bg: #3a2018; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 16px; margin: 0; letter-spacing: .04em; }
-  header .spacer { flex: 1; }
-  .pill { font: 12px ui-monospace, Consolas, monospace; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
-  .pill.busy { color: var(--warn); border-color: var(--warn); }
-  .pill.ready { color: var(--ok); border-color: #2f5a3d; }
-  button { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: grid; grid-template-columns: 250px minmax(0, 1fr); line-height: 1.5; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
   button:hover { border-color: var(--muted); }
-  button.primary { background: var(--accent); color: #0b1a10; border-color: var(--accent); font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
   button:disabled { opacity: .5; cursor: default; }
-  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 0; }
-  section { display: flex; flex-direction: column; min-height: 0; }
-  #chat { border-right: 1px solid var(--line); }
-  #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-  .msg { max-width: 92%; padding: 12px 14px; border-radius: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-  .msg.user { align-self: flex-end; background: var(--chip); }
-  .msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
-  .msg.bot.pending { color: var(--muted); font-style: italic; }
-  .msg h1, .msg h2, .msg h3, .doc h1, .doc h2, .doc h3 { font-size: 15px; margin: 12px 0 6px; }
-  .msg p, .doc p { margin: 6px 0; }
-  .msg ul, .doc ul { margin: 6px 0; padding-left: 20px; }
-  code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
-  .cite { font: 11.5px ui-monospace, Consolas, monospace; padding: 0 6px; margin: 0 2px; border-radius: 6px; line-height: 1.6; vertical-align: 1px; }
-  .cite.verified, .cite.rechecked { color: var(--ok); border-color: #2f5a3d; }
-  .cite.warning { color: var(--warn); border-color: var(--warn); }
-  .sources { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
-  .sources a { color: var(--text); cursor: pointer; text-decoration: underline dotted; }
-  .meta { font: 11.5px ui-monospace, Consolas, monospace; color: var(--muted); margin-top: 8px; }
-  form#ask { display: flex; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); }
-  textarea, input[type=text] { flex: 1; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; resize: none; }
-  nav { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid var(--line); }
-  nav button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 12px; }
-  nav button.on { color: var(--text); border-bottom-color: var(--accent); }
-  .tab { flex: 1; overflow-y: auto; padding: 18px 20px; display: none; }
-  .tab.on { display: block; }
-  .crumbs { font: 12.5px ui-monospace, Consolas, monospace; color: var(--muted); margin-bottom: 12px; }
-  .crumbs a { color: var(--text); cursor: pointer; }
-  .doc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.5; font-size: 14px; }
-  .items { display: grid; gap: 6px; margin-bottom: 14px; }
-  .item { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: 14px; }
-  .item:hover { border-color: var(--muted); }
-  .item .tag { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); min-width: 64px; }
-  .label { font: 11px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
-  pre { font: 12.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; }
-  #drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); margin: 12px 0; }
-  #drop.over { border-color: var(--accent); color: var(--text); }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13.5px; margin-bottom: 12px; }
-  .kv span:nth-child(odd) { color: var(--muted); }
-  .warn { color: var(--warn); } .ok { color: var(--ok); }
-  select, input[type=password], input[type=number] { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-  header select { padding: 5px 8px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; display: grid; gap: 10px; }
-  .card .kv { margin: 0; }
-  .field { display: grid; gap: 4px; font-size: 13.5px; }
-  .field label { color: var(--muted); }
-  .field input, .field select { width: 100%; background: var(--bg); }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .row input[type=text] { min-width: 180px; background: var(--bg); }
-  .bar { height: 6px; background: var(--chip); border-radius: 3px; overflow: hidden; }
-  .bar div { height: 100%; background: var(--accent); }
-  .hint { border: 1px solid var(--warn); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin: 0 20px 12px; }
-  .hint a { color: var(--warn); cursor: pointer; text-decoration: underline; }
-  .steps { font: 12px ui-monospace, Consolas, monospace; font-style: normal; margin-top: 6px; display: grid; gap: 2px; }
-  .steps div:last-child { color: var(--text); }
-  pre .ln { display: block; } pre .ln.hi { background: rgba(95, 191, 127, .18); box-shadow: -3px 0 0 var(--ok); }
-  .token { font: 12.5px ui-monospace, Consolas, monospace; background: var(--chip); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-auto-rows: minmax(50vh, auto); overflow-y: auto; } #chat { border-right: none; } }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=text], input[type=password], input[type=number], select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; }
+  h1, h2, h3 { margin: 0; line-height: 1.25; }
+  .muted { color: var(--muted); } .small { font-size: 13px; } .ok { color: var(--ok); } .warn { color: var(--warn); }
+  code { font: 13px ui-monospace, Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+  /* barra laterale */
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+  aside h1 { font-size: 18px; padding: 0 6px; }
+  nav { display: grid; gap: 4px; }
+  nav button { text-align: left; border: none; background: none; padding: 10px 12px; border-radius: 8px; font-weight: 500; }
+  nav button:hover { background: var(--soft); }
+  nav button[aria-current=page] { background: var(--soft); color: var(--accent); font-weight: 700; }
+  .side-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 6px 4px; }
+  #statusBox { margin-top: auto; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .bar { height: 6px; background: var(--soft); border-radius: 3px; overflow: hidden; } .bar div { height: 100%; background: var(--accent); }
+
+  /* aree */
+  main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .view { display: none; flex: 1; min-height: 0; flex-direction: column; } .view.on { display: flex; }
+  .page { flex: 1; overflow-y: auto; padding: 28px clamp(16px, 4vw, 44px); }
+  .page > * { max-width: 860px; margin-left: auto; margin-right: auto; }
+  .page h2 { font-size: 22px; margin-bottom: 4px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; display: grid; gap: 12px; }
+  .card h3 { font-size: 16px; }
+  .field { display: grid; gap: 5px; } .field label { font-weight: 600; font-size: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .notice { border-radius: 10px; padding: 10px 12px; font-size: 14px; background: var(--warn-bg); color: var(--text); border: 1px solid var(--warn); }
+  .notice.good { background: var(--ok-bg); border-color: var(--ok); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; } details[open] summary { margin-bottom: 10px; }
+
+  /* chiedi */
+  #log { flex: 1; overflow-y: auto; padding: 24px clamp(16px, 4vw, 44px); display: flex; flex-direction: column; gap: 16px; }
+  #log > * { width: 100%; max-width: 820px; margin: 0 auto; }
+  #log > .hello { margin: auto; text-align: center; display: grid; gap: 10px; justify-items: center; }
+  .hello h2 { font-size: 26px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chips button { border-radius: 999px; font-size: 14px; }
+  .steps-list { text-align: left; display: grid; gap: 10px; width: 100%; max-width: 560px; }
+  .step { display: flex; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); font-weight: 700; flex: none; }
+  .step.done .n { background: var(--ok-bg); color: var(--ok); }
+  .step > div { flex: 1; }
+  .msg { padding: 12px 16px; border-radius: 14px; overflow-wrap: anywhere; }
+  .msg.user { background: var(--accent); color: var(--accent-text); align-self: flex-end; width: auto !important; max-width: min(80%, 660px) !important; margin: 0 max(0px, calc((100% - 820px) / 2)) 0 0 !important; }
+  .msg.bot { background: var(--panel); border: 1px solid var(--line); }
+  .msg p, .doc p { margin: 6px 0; } .msg ul, .doc ul { margin: 6px 0; padding-left: 22px; } .msg h3, .doc h3 { font-size: 15px; margin: 12px 0 4px; }
+  .working { color: var(--muted); } .working .now { font: 13px ui-monospace, Consolas, monospace; margin-top: 6px; display: grid; gap: 2px; }
+  .cite { font: 600 12px ui-monospace, Consolas, monospace; padding: 1px 7px; margin: 0 2px; border-radius: 999px; border: 1px solid; vertical-align: 1px; }
+  .cite.verified, .cite.rechecked { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
+  .cite.warning { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+  .sources { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; display: grid; gap: 6px; }
+  .sources button { text-align: left; border: none; background: none; padding: 2px 0; display: flex; gap: 8px; align-items: baseline; }
+  .sources button:hover span:last-child { text-decoration: underline; }
+  form#ask { padding: 14px clamp(16px, 4vw, 44px) 20px; }
+  form#ask > div { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+  form#ask textarea { resize: none; min-height: 48px; }
+  .topbar { display: flex; justify-content: flex-end; gap: 8px; padding: 10px clamp(16px, 4vw, 44px) 0; min-height: 10px; }
+
+  /* fonte */
+  #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 30px rgba(0,0,0,.18); padding: 22px; overflow-y: auto; display: none; gap: 14px; flex-direction: column; z-index: 5; }
+  #drawer.on { display: flex; }
+  .quote { background: var(--soft); border-radius: 10px; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13.5px/1.5 ui-monospace, Consolas, monospace; }
+
+  /* documenti */
+  .crumbs { font-size: 14px; margin-top: 16px; } .crumbs button { font-size: 14px; }
+  .list { display: grid; gap: 6px; margin-top: 8px; }
+  .item { display: flex; gap: 12px; align-items: baseline; text-align: left; padding: 10px 12px; border-radius: 10px; width: 100%; }
+  .item .kind { font-size: 12px; color: var(--muted); min-width: 78px; flex: none; }
+  .doc { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 10px; }
+  pre.text { font: 13px/1.55 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0 0; }
+  pre.text .ln { display: block; } pre.text .ln.hi { background: var(--ok-bg); box-shadow: -3px 0 0 var(--ok); }
+  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; }
+  #drop.over { border-color: var(--accent); background: var(--ok-bg); }
+  .token { font: 13px ui-monospace, Consolas, monospace; background: var(--soft); padding: 8px 10px; border-radius: 8px; overflow-wrap: anywhere; user-select: all; }
+
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    aside { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border-right: none; border-bottom: 1px solid var(--line); }
+    nav { display: flex; } #statusBox, .side-label, #spaceWrap { display: none; }
+  }
 </style>
 </head>
 <body>
-<header>
+<aside>
   <h1>LLMWiki</h1>
-  <select id="space" hidden title="Spazio di lavoro"></select>
-  <span id="status" class="pill">…</span>
-  <span class="spacer"></span>
-  <button id="newChat" title="Svuota la conversazione di questo spazio">Nuova conversazione</button>
-  <button id="tokenBtn" hidden>Token</button>
-</header>
+  <div id="spaceWrap" hidden>
+    <div class="side-label">Spazio</div>
+    <select id="space" aria-label="Spazio di lavoro"></select>
+  </div>
+  <nav aria-label="Sezioni">
+    <button data-view="chat" aria-current="page">Chiedi</button>
+    <button data-view="docs">Documenti</button>
+    <button data-view="settings" id="navSettings" hidden>Impostazioni</button>
+  </nav>
+  <div id="statusBox" aria-live="polite">…</div>
+</aside>
 <main>
-  <section id="chat">
-    <div id="log">
-      <div class="msg bot">Chiedi qualcosa sui documenti. Ogni citazione viene verificata: <span class="ok">✓</span> confermata, <span class="warn">⚠</span> non confermata dal testo citato.</div>
-    </div>
-    <form id="ask">
-      <textarea id="question" rows="2" placeholder="Es. Ci sono penali per ritardo nel contratto di fornitura?"></textarea>
+  <section id="chat" class="view on">
+    <div class="topbar"><button id="newChat" hidden>Nuova conversazione</button><button id="tokenBtn" hidden>Token</button></div>
+    <div id="log"></div>
+    <form id="ask"><div>
+      <textarea id="question" rows="1" aria-label="La tua domanda" placeholder="Scrivi una domanda sui tuoi documenti…"></textarea>
       <button class="primary" id="send">Chiedi</button>
-    </form>
+    </div></form>
   </section>
-  <section>
-    <nav>
-      <button data-tab="explore" class="on">Esplora</button>
-      <button data-tab="source">Fonte</button>
-      <button data-tab="upload">Carica</button>
-      <button data-tab="settings" id="settingsTab" hidden>Impostazioni</button>
-    </nav>
-    <div id="hint" class="hint" hidden></div>
-    <div id="explore" class="tab on"></div>
-    <div id="source" class="tab"><p class="meta">Clicca una citazione per vedere il passaggio su cui è stata verificata.</p></div>
-    <div id="upload" class="tab">
-      <div class="label">Cartella di destinazione</div>
-      <input type="text" id="folder" placeholder="es. contratti/2026 (vuoto = radice)" style="width:100%">
-      <div id="drop">Trascina qui i documenti oppure <button id="pick">scegli i file</button><br><small>pdf, docx, md, txt, html, csv… Puoi caricare anche mentre l'indicizzazione è in corso.</small></div>
+  <section id="docs" class="view"><div class="page">
+    <h2>Documenti</h2>
+    <p class="muted">Aggiungi i file su cui vuoi fare domande. L'app li legge e prepara un riassunto di ognuno: più sono, più tempo serve.</p>
+    <div class="card">
+      <div id="drop"><b>Trascina qui i file</b> oppure <button id="pick">scegli dal computer</button>
+        <div class="muted small">PDF, Word, testo, markdown, HTML, CSV</div></div>
       <input type="file" id="files" multiple hidden>
-      <div id="uploadLog" class="meta"></div>
-      <div class="label">Stato dell'indice</div>
-      <div id="statusDetail" class="kv"></div>
+      <div class="field"><label for="folder">In quale cartella metterli (facoltativo)</label>
+        <input type="text" id="folder" placeholder="per esempio: contratti/2026"></div>
+      <div class="row"><button id="openFolder" hidden>Apri la cartella sul computer</button><span id="uploadMsg" class="small"></span></div>
     </div>
-    <div id="settings" class="tab"></div>
-  </section>
+    <div id="browser"></div>
+  </div></section>
+  <section id="settings" class="view"><div class="page" id="settingsPage"></div></section>
 </main>
+<div id="drawer" role="dialog" aria-label="Fonte della citazione"></div>
 <script>
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let token = "";
-try { token = localStorage.getItem("llmwiki_token") || ""; } catch (e) {}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+let token = ""; try { token = localStorage.getItem("llmwiki_token") || ""; } catch (e) {}
+let S = null;            // ultimo stato ricevuto dal server
+let settings = null;     // impostazioni (solo dal computer dell'app)
+let running = null;      // AbortController della domanda in corso
+let shownToken = null, modelContexts = {}, detected = null, lastProbe = null, wasBusy = false;
+const answers = [], chat = [];
 
 async function api(path, options = {}) {
   const headers = Object.assign({}, options.headers);
   if (token) headers.Authorization = "Bearer " + token;
   const response = await fetch(path, Object.assign({}, options, { headers }));
-  if (response.status === 401) {
-    askToken("Questo server richiede un token personale.");
-    throw new Error("token mancante o non valido");
-  }
+  if (response.status === 401) { askToken(); throw new Error("serve un token valido"); }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || data.detail || ("errore " + response.status));
+  if (!response.ok) throw new Error(data.error || data.detail || "errore " + response.status);
   return data;
 }
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
 
-function askToken(message) {
-  const value = prompt(message + "\nIncolla il tuo token:", token);
+function askToken() {
+  const value = prompt("Questo LLMWiki è condiviso: incolla il token personale che ti è stato dato.", token);
   if (value === null) return;
-  token = value.trim();
-  try { localStorage.setItem("llmwiki_token", token); } catch (e) {}
-  refreshStatus(); explore("");
+  token = value.trim(); try { localStorage.setItem("llmwiki_token", token); } catch (e) {}
+  refreshStatus().then(() => { loadHistory(); explore(""); });
 }
-$("tokenBtn").onclick = () => askToken("Cambia token.");
+$("tokenBtn").onclick = askToken;
 
-// Markdown minimo: il testo è sempre passato da esc() prima di diventare HTML.
+// Markdown minimo: il testo passa sempre da esc() prima di diventare HTML.
 function md(text) {
   const out = []; let list = false;
   const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
   for (const raw of String(text).split("\n")) {
     const line = raw.trimEnd();
+    if (line.startsWith("<!--")) continue;
     const item = line.match(/^\s*[-*]\s+(.*)$/) || line.match(/^\s*\d+\.\s+(.*)$/);
     if (item) { if (!list) { out.push("<ul>"); list = true; } out.push("<li>" + inline(item[1]) + "</li>"); continue; }
     if (list) { out.push("</ul>"); list = false; }
-    const head = line.match(/^(#{1,4})\s+(.*)$/);
-    if (head) out.push("<h3>" + inline(head[2]) + "</h3>");
-    else if (line.startsWith("<!--")) continue;
-    else if (line.trim()) out.push("<p>" + inline(line) + "</p>");
+    const head = line.match(/^#{1,4}\s+(.*)$/);
+    if (head) out.push("<h3>" + inline(head[1]) + "</h3>");
+    else if (line.trim() && !/^-{3,}$/.test(line.trim())) out.push("<p>" + inline(line.replace(/^>\s?/, "")) + "</p>");
   }
   if (list) out.push("</ul>");
   return out.join("");
 }
 
-const SIGN = { verified: "✓", rechecked: "✓", warning: "⚠" };
-const answers = [];
-const chat = [];   // scambi di questa conversazione: servono alle domande di approfondimento
-let running = null; // AbortController della domanda in corso
-function addMsg(cls, html) { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("log").append(d); $("log").scrollTop = $("log").scrollHeight; return d; }
-const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+// ---------------------------------------------------------------- navigazione
+function show(view) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === view));
+  document.querySelectorAll("nav button").forEach((b) => { if (b.dataset.view === view) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  closeDrawer();
+  if (view === "settings") loadSettings();
+  if (view === "docs") explore($("browser").dataset.folder || "");
+  if (view === "chat") $("question").focus();
+}
+document.querySelector("nav").addEventListener("click", (event) => { if (event.target.dataset.view) show(event.target.dataset.view); });
+document.addEventListener("click", (event) => { const go = event.target.closest("[data-go]"); if (go) show(go.dataset.go); });
+
+// ---------------------------------------------------------------- stato
+async function refreshStatus() {
+  try { S = await api("/api/status"); } catch (error) { $("statusBox").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; return; }
+  $("navSettings").hidden = !S.local;
+  $("tokenBtn").hidden = S.local || !S.auth;
+  $("openFolder").hidden = !S.local;
+  if (S.spaces && S.local) {
+    const sel = $("space"), sig = S.spaces.map((x) => x.id + ":" + x.name).join("|");
+    if (sel.dataset.sig !== sig) { sel.innerHTML = S.spaces.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.name) + "</option>").join(""); sel.dataset.sig = sig; }
+    if (document.activeElement !== sel) sel.value = S.space;
+    $("spaceWrap").hidden = false;
+  }
+  const queue = S.pending + S.indexing;
+  let html = "<b>" + S.ready + (S.ready === 1 ? " documento pronto" : " documenti pronti") + "</b>";
+  if (S.waiting) html += '<span class="warn">Il modello non risponde: riprovo da solo tra poco.</span>';
+  else if (queue) html += "<span>Sto leggendo altri " + queue + "…</span><div class=\"bar\"><div style=\"width:" + Math.round(100 * S.ready / Math.max(S.total, 1)) + '%"></div></div>';
+  else if (S.busy) html += "<span>Aggiorno i riassunti delle cartelle…</span>";
+  if (S.error) html += '<span class="warn">' + S.error + (S.error === 1 ? " file non letto" : " file non letti") + (S.local ? ' · <button class="link" data-go="settings">vedi</button>' : "") + "</span>";
+  if (S.provider === "mock") html += '<span class="muted">Modalità demo</span>';
+  $("statusBox").innerHTML = html;
+  if (!chat.length && !running) renderWelcome();
+  if (wasBusy && !S.busy && $("docs").classList.contains("on")) explore($("browser").dataset.folder || "");
+  wasBusy = S.busy;
+}
+
+// ---------------------------------------------------------------- chiedi
+function addMsg(cls, html) { $("log").querySelector(".hello")?.remove(); const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("log").append(d); $("log").scrollTop = $("log").scrollHeight; return d; }
+
+function renderWelcome() {
+  if (!S) return;
+  const needModel = S.local && S.provider === "mock", needJudge = S.local && S.judge !== "nli", needDocs = S.total === 0;
+  let html = "<h2>Chiedi ai tuoi documenti</h2>";
+  if (S.local && (needModel || needDocs)) {
+    const step = (n, done, title, body) => '<div class="step' + (done ? " done" : "") + '"><span class="n">' + (done ? "✓" : n) + "</span><div><b>" + title + "</b><div class=\"small muted\">" + body + "</div></div></div>";
+    const found = detected && detected.length ? detected[0] : null;
+    html += '<p class="muted">Tre passi per cominciare.</p><div class="steps-list">' +
+      step(1, !needModel, "Collega un modello", needModel
+        ? (found ? "Ho trovato <b>" + esc(found.models[0]) + "</b> acceso su questo computer (" + esc(found.name) + '). <button class="link" id="useFound">Usa questo</button> oppure <button class="link" data-go="settings">scegline un altro</button>.'
+                 : 'È il programma che legge i documenti e scrive le risposte: può girare sul tuo computer o in un servizio online. <button class="link" data-go="settings">Scegli il modello</button>')
+        : "Collegato: " + esc(S.model)) +
+      step(2, !needJudge, "Scarica il verificatore delle citazioni", needJudge
+        ? 'Un piccolo programma (1,1 GB, una volta sola) che controlla se ogni citazione dice davvero ciò che la risposta afferma. Consigliato. <button class="link" id="getJudge">Scarica</button> <span id="judgeMsg"></span>'
+        : "Installato.") +
+      step(3, !needDocs, "Aggiungi i tuoi documenti", needDocs ? 'PDF, Word, appunti in markdown… <button class="link" data-go="docs">Aggiungi documenti</button>' : S.total + " documenti aggiunti.") + "</div>";
+  } else if (needDocs) {
+    html += '<p class="muted">In questo spazio non ci sono ancora documenti.</p>';
+  } else {
+    html += '<p class="muted">Ogni risposta indica da quali righe di quale documento viene, e ogni citazione viene controllata:<br><span class="cite verified">1 ✓</span> il testo la conferma · <span class="cite warning">2 ⚠</span> il testo non basta a confermarla</p>' +
+      (S.ready ? '<div class="chips"><button data-ask="Di cosa parlano questi documenti?">Di cosa parlano questi documenti?</button><button data-ask="Quali sono le scadenze e le date importanti?">Quali sono le scadenze importanti?</button><button data-ask="Riassumi i punti principali.">Riassumi i punti principali</button></div>' : '<p class="muted">Sto ancora leggendo i documenti: potrai chiedere tra poco.</p>') +
+      (needJudge ? '<p class="small muted">Consigliato: <button class="link" id="getJudge">scarica il verificatore delle citazioni</button> (1,1 GB, una volta sola), che rende il controllo più rapido e indipendente dal modello. <span id="judgeMsg"></span></p>' : "");
+  }
+  let hello = $("log").querySelector(".hello");
+  if (!hello) { $("log").innerHTML = ""; hello = document.createElement("div"); hello.className = "hello"; $("log").append(hello); }
+  if (hello.dataset.html !== html) { hello.innerHTML = html; hello.dataset.html = html; }
+  $("newChat").hidden = true;
+}
+$("log").addEventListener("click", async (event) => {
+  const t = event.target;
+  if (t.dataset.ask) { $("question").value = t.dataset.ask; $("ask").requestSubmit(); }
+  if (t.id === "useFound") { try { await useServer(detected[0]); } catch (error) { alert(error.message); } }
+  if (t.id === "getJudge") { await post("/api/admin/model/download").catch((error) => alert(error.message)); pollJudge(); }
+  const cite = t.closest("[data-c]"); if (cite) showSource(cite.dataset.a, cite.dataset.c);
+});
+async function pollJudge() {
+  const s = await api("/api/admin/settings").catch(() => null); if (!s) return;
+  const j = s.judge_model, el = $("judgeMsg");
+  if (el) el.textContent = j.status === "downloading" ? "scarico… " + Math.round(100 * j.done / j.total) + "%" : j.status === "error" ? "non riuscito: " + j.error : "";
+  if (j.status === "downloading") setTimeout(pollJudge, 1500); else refreshStatus();
+}
+async function useServer(server) {
+  const model = server.models[0];
+  const list = await post("/api/admin/models", { provider: "openai", base_url: server.base_url, api_key_env: "" }).catch(() => ({ models: [] }));
+  const context = (list.models.find((m) => m.id === model) || {}).context || 0;
+  await post("/api/admin/settings", { llm: { provider: "openai", base_url: server.base_url, api_key_env: "", agent_model: model, summary_model: model, judge_model: model, context_tokens: context }, index: { concurrency: 2 } });
+  await refreshStatus();
+}
+
 function describe(e) {
-  const a = e.args || {}, who = e.explorer ? "esploratore: " : "";
+  const a = e.args || {}, who = e.explorer ? "aiutante: " : "";
   switch (e.tool) {
     case "list_folder": return who + "apro la cartella " + (a.path || "principale");
-    case "read_node": return who + "leggo la sintesi " + short(a.node_id, 60);
-    case "read_summary": return who + "leggo la scheda di " + short(a.doc, 70);
-    case "read_document": return who + "leggo " + short(a.doc, 60) + (a.start_line ? ", righe " + a.start_line + (a.end_line ? "–" + a.end_line : " e seguenti") : "");
-    case "search": return who + "cerco «" + short(a.query, 70) + "»";
-    case "find_documents": return who + "cerco il documento «" + short(a.name, 60) + "»";
-    case "delegate": return "lancio " + ((a.tasks || []).length || "alcuni") + " esploratori in parallelo";
+    case "read_node": return who + "leggo un riassunto di gruppo";
+    case "read_summary": return who + "leggo la scheda di " + short(a.doc, 60);
+    case "read_document": return who + "leggo " + short(a.doc, 50) + (a.start_line ? ", righe " + a.start_line + (a.end_line ? "–" + a.end_line : " e seguenti") : "");
+    case "search": return who + "cerco «" + short(a.query, 60) + "»";
+    case "find_documents": return who + "cerco il documento «" + short(a.name, 50) + "»";
+    case "delegate": return "mi faccio aiutare da " + ((a.tasks || []).length || "alcuni") + " aiutanti in parallelo";
     default: return who + e.tool;
   }
 }
+const SIGN = { verified: "✓", rechecked: "✓", warning: "⚠" };
+const VERDICT = { verified: "Confermata: il testo citato dice proprio questo.", rechecked: "Confermata dopo un secondo controllo.", warning: "Non confermata: il testo citato non basta a sostenerla." };
 
 function renderAnswer(data) {
   const index = answers.push(data) - 1;
   const byId = Object.fromEntries(data.citations.map((c) => [c.id, c]));
   let html = md(data.answer).replace(/\[(\d+)\]/g, (whole, n) => {
     const c = byId[n];
-    if (!c) return '<span class="cite warning" title="marcatore senza citazione">' + n + " ⚠</span>";
-    return '<button class="cite ' + esc(c.status) + '" data-a="' + index + '" data-c="' + n + '">' + n + " " + (SIGN[c.status] || "") + "</button>";
+    if (!c) return '<span class="cite warning" title="Riferimento senza fonte">' + n + " ⚠</span>";
+    return '<button class="cite ' + esc(c.status) + '" data-a="' + index + '" data-c="' + n + '" title="' + esc(VERDICT[c.status] || "") + '">' + n + " " + (SIGN[c.status] || "") + "</button>";
   });
   if (data.citations.length) {
-    html += '<div class="sources">' + data.citations.map((c) =>
-      '<div><span class="' + (c.status === "warning" ? "warn" : "ok") + '">' + (SIGN[c.status] || "·") + "</span> [" + c.id + '] <a data-a="' + index + '" data-c="' + c.id + '">' + esc(c.doc) + "</a> righe " + c.start_line + "–" + c.end_line +
-      (c.status === "warning" ? ' <span class="warn">non confermata</span>' : "") + "</div>").join("") + "</div>";
+    html += '<div class="sources"><b>Da dove viene</b>' + data.citations.map((c) =>
+      '<button data-a="' + index + '" data-c="' + c.id + '"><span class="' + (c.status === "warning" ? "warn" : "ok") + '">' + (SIGN[c.status] || "·") + " " + c.id + "</span><span>" + esc(c.doc) + ", righe " + c.start_line + "–" + c.end_line + (c.status === "warning" ? ' <span class="warn">(non confermata)</span>' : "") + "</span></button>").join("") + "</div>";
   }
-  const warnings = data.warnings ? ' · <span class="warn">' + data.warnings + " citazioni non confermate</span>" : "";
-  html += '<div class="meta">' + data.steps + " passi · " + data.trace.length + " letture" + warnings + (data.complete ? "" : ' · <span class="warn">risposta incompleta</span>') + "</div>";
+  const notes = [];
+  if (data.warnings) notes.push('<span class="warn">' + data.warnings + (data.warnings === 1 ? " citazione non confermata: controlla la fonte prima di fidarti" : " citazioni non confermate: controlla le fonti prima di fidarti") + "</span>");
+  if (!data.citations.length && data.complete) notes.push("Risposta senza fonti: nei documenti non c'era nulla da citare.");
+  if (data.mode === "ricerca diretta") notes.push("Il modello non è riuscito a esplorare i documenti da solo: ho cercato io i passaggi più vicini alla domanda. La risposta può essere meno completa.");
+  if (!data.complete) notes.push('<span class="warn">Il modello non ha completato la risposta.</span>');
+  if (notes.length) html += '<div class="small muted" style="margin-top:10px">' + notes.join("<br>") + "</div>";
   return html;
 }
 
 function showSource(a, n) {
-  const c = answers[a].citations.find((x) => String(x.id) === String(n));
-  if (!c) return;
-  const state = { verified: "confermata dal decision model", rechecked: "confermata al secondo controllo", warning: "non confermata" }[c.status] || c.status;
-  $("source").innerHTML =
-    '<div class="label">Affermazione</div><div class="doc">' + esc(c.claim) + "</div>" +
-    '<div class="kv"><span>Esito</span><span class="' + (c.status === "warning" ? "warn" : "ok") + '">' + (SIGN[c.status] || "") + " " + esc(state) + "</span>" +
-    "<span>Documento</span><span><a class='open' style='cursor:pointer;text-decoration:underline dotted'>" + esc(c.doc) + "</a> · righe " + c.start_line + "–" + c.end_line + "</span>" +
-    (c.confidence === null ? "" : "<span>Confidenza</span><span>" + c.confidence.toFixed(2) + " (" + esc(c.method) + ")</span>") +
-    (c.note ? "<span>Nota</span><span>" + esc(c.note) + "</span>" : "") + "</div>" +
-    '<div class="label">Testo citato</div><pre>' + esc(c.passage || "(non disponibile)") + "</pre>";
-  $("source").querySelector(".open").onclick = () => openText(c.doc, Math.max(1, c.start_line - 25), c.end_line + 25, c.start_line, c.end_line);
-  tab("source");
+  const c = answers[a].citations.find((x) => String(x.id) === String(n)); if (!c) return;
+  const bad = c.status === "warning";
+  $("drawer").innerHTML = '<div class="row" style="justify-content:space-between"><h3>Fonte ' + c.id + '</h3><button id="closeDrawer" aria-label="Chiudi">Chiudi</button></div>' +
+    '<div class="notice ' + (bad ? "" : "good") + '"><b>' + (SIGN[c.status] || "") + " " + esc(VERDICT[c.status] || c.status) + "</b>" + (c.note ? "<br>" + esc(c.note) : "") + "</div>" +
+    '<div><div class="small muted">La risposta afferma</div>' + esc(c.claim) + "</div>" +
+    '<div><div class="small muted">Il documento dice (' + esc(c.doc) + ", righe " + c.start_line + "–" + c.end_line + ')</div><div class="quote">' + esc(c.passage || "(testo non disponibile)") + "</div></div>" +
+    '<button id="openInDoc">Apri il documento in questo punto</button>';
+  $("drawer").classList.add("on");
+  $("closeDrawer").onclick = closeDrawer;
+  $("openInDoc").onclick = () => { show("docs"); openText(c.doc, Math.max(1, c.start_line - 25), c.end_line + 25, c.start_line, c.end_line); };
 }
-
-$("log").addEventListener("click", (event) => {
-  const el = event.target.closest("[data-c]");
-  if (el) showSource(el.dataset.a, el.dataset.c);
-});
+function closeDrawer() { $("drawer").classList.remove("on"); }
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
 
 $("ask").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (running) { running.abort(); return; }  // il pulsante, mentre risponde, è "Ferma"
-  const question = $("question").value.trim();
-  if (!question) return;
-  $("question").value = "";
+  const question = $("question").value.trim(); if (!question) return;
+  $("question").value = ""; $("question").style.height = "auto";
   addMsg("user", esc(question));
-  const pending = addMsg("bot pending", '<div>Sto esplorando la wiki…</div><div class="steps"></div>');
-  const head = pending.firstChild, steps = pending.querySelector(".steps");
+  const pending = addMsg("bot working", '<div>Cerco nei documenti…</div><div class="now"></div>');
+  const head = pending.firstChild, now = pending.querySelector(".now");
   const controller = (running = new AbortController());
-  $("send").textContent = "Ferma"; $("send").classList.remove("primary");
+  $("send").textContent = "Ferma"; $("send").classList.remove("primary"); $("newChat").hidden = false;
   const started = Date.now();
   try {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
     const response = await fetch("/api/ask/stream", { method: "POST", headers, signal: controller.signal, body: JSON.stringify({ question, history: chat.slice(-3) }) });
-    if (response.status === 401) { askToken("Questo server richiede un token personale."); throw new Error("token mancante o non valido"); }
+    if (response.status === 401) { askToken(); throw new Error("serve un token valido"); }
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "errore " + response.status);
     const reader = response.body.getReader(), decoder = new TextDecoder();
     let buffer = "", done = false, count = 0;
     while (!done) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
+      const chunk = await reader.read(); if (chunk.done) break;
       buffer += decoder.decode(chunk.value, { stream: true });
       let nl;
       while ((nl = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1);
-        if (!line.trim()) continue;
+        const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1); if (!line.trim()) continue;
         const e = JSON.parse(line);
         if (e.type === "step") {
-          count++;
-          const row = document.createElement("div"); row.textContent = describe(e); steps.append(row);
-          while (steps.children.length > 6) steps.firstChild.remove();
-          head.textContent = "Sto esplorando la wiki… " + count + " letture, " + Math.round((Date.now() - started) / 1000) + " s";
-        } else if (e.type === "verifying") head.textContent = "Verifico " + e.count + " citazioni…";
+          count++; const row = document.createElement("div"); row.textContent = describe(e); now.append(row);
+          while (now.children.length > 4) now.firstChild.remove();
+          head.textContent = "Cerco nei documenti… " + count + (count === 1 ? " lettura" : " letture") + ", " + Math.round((Date.now() - started) / 1000) + " secondi";
+        } else if (e.type === "verifying") head.textContent = "Controllo " + e.count + (e.count === 1 ? " citazione…" : " citazioni…");
         else if (e.type === "error") throw new Error(e.error);
         else if (e.type === "answer") { pending.className = "msg bot"; pending.innerHTML = renderAnswer(e.answer); chat.push({ question, answer: e.answer.answer }); done = true; }
         $("log").scrollTop = $("log").scrollHeight;
@@ -269,253 +372,255 @@ $("ask").addEventListener("submit", async (event) => {
     if (!done) throw new Error("la risposta si è interrotta");
   } catch (error) {
     pending.className = "msg bot";
-    pending.innerHTML = error.name === "AbortError" ? '<span class="meta">Domanda fermata.</span>' : '<span class="warn">Errore: ' + esc(error.message) + "</span>";
+    pending.innerHTML = error.name === "AbortError" ? '<span class="muted">Domanda fermata.</span>'
+      : '<span class="warn"><b>Non sono riuscito a rispondere.</b> ' + esc(error.message) + "</span>" + (S && S.local ? '<div class="small" style="margin-top:6px">Se il modello è spento, accendilo e riprova. <button class="link" data-go="settings">Controlla il modello</button></div>' : "");
   }
   running = null; $("send").textContent = "Chiedi"; $("send").classList.add("primary");
   $("log").scrollTop = $("log").scrollHeight;
 });
 $("question").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!running) $("ask").requestSubmit(); } });
+$("question").addEventListener("input", () => { const q = $("question"); q.style.height = "auto"; q.style.height = Math.min(q.scrollHeight, 160) + "px"; });
 
 async function loadHistory() {
-  [...$("log").querySelectorAll(".msg")].slice(1).forEach((m) => m.remove());  // resta il messaggio di benvenuto
-  chat.length = 0; answers.length = 0;
+  $("log").innerHTML = ""; chat.length = 0; answers.length = 0;
   try {
     const data = await api("/api/history?limit=20");
     for (const item of data.items) { addMsg("user", esc(item.question)); addMsg("bot", renderAnswer(item.answer)); chat.push({ question: item.question, answer: item.answer.answer }); }
   } catch (error) {}
+  $("newChat").hidden = !chat.length;
+  if (!chat.length) renderWelcome();
 }
 $("newChat").onclick = async () => {
   if (running) running.abort();
-  if (chat.length && !confirm("Svuotare la conversazione? Le domande fatte finora in questo spazio non saranno più visibili.")) return;
+  if (chat.length && !confirm("Cominciare una nuova conversazione? Quella attuale verrà cancellata.")) return;
   await api("/api/history", { method: "DELETE" }).catch(() => {});
   loadHistory();
 };
 
-function tab(name) {
-  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === name));
-  if (name === "settings") loadSettings();
-}
-
-// ---------------------------------------------------------------- impostazioni (solo dal computer dell'app)
-let settings = null, shownToken = null, pollTimer = null;
-const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-
-async function loadSettings() {
-  try { settings = await api("/api/admin/settings"); renderSettings(); }
-  catch (error) { $("settings").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; }
-}
-
-function judgeLine(j) {
-  if (j.status === "ready") return '<span class="ok">installato</span>';
-  if (j.status === "downloading") return "scarico… " + Math.round(100 * j.done / j.total) + "%";
-  if (j.status === "error") return '<span class="warn">errore: ' + esc(j.error) + "</span>";
-  return "non installato";
-}
-
-function renderSettings() {
-  const s = settings, l = s.llm, j = s.judge_model, shared = s.server.host !== "127.0.0.1" && s.server.host !== "localhost";
-  const opt = (value, label, current) => '<option value="' + value + '"' + (value === current ? " selected" : "") + ">" + label + "</option>";
-  const field = (id, label, value, type) => '<div class="field"><label for="' + id + '">' + label + '</label><input type="' + (type || "text") + '" id="' + id + '" value="' + esc(value) + '"></div>';
-  $("settings").innerHTML =
-    '<div class="label">Spazio</div><div class="card"><div class="kv"><span>Documenti</span><span>' + esc(s.docs_dir) + "</span></div>" +
-    '<div class="row"><button data-act="open-folder">Apri la cartella dei documenti</button></div>' +
-    (s.desktop ? '<div class="row"><input type="text" id="newSpace" placeholder="Nuovo spazio, es. Studio"><button data-act="add-space">Crea spazio</button></div><div class="meta">Ogni spazio ha i suoi documenti e il suo indice: uno per lo studio, uno per il lavoro, uno per l\'azienda.</div>' : "") + "</div>" +
-
-    '<div class="label">Modello linguistico</div><div class="card">' +
-    '<div class="field"><label for="provider">Dove gira</label><select id="provider">' + opt("openai", "Sul mio computer (o un server compatibile OpenAI)", l.provider) + opt("anthropic", "Claude di Anthropic (a consumo)", l.provider) + opt("mock", "Demo senza modello", l.provider) + "</select></div>" +
-    '<div data-for="openai">' + field("baseUrl", "Indirizzo del server", l.base_url) + '<div class="row" style="margin-top:8px"><button data-act="detect">Rileva modelli su questo computer</button><span id="detected" class="meta"></span></div></div>' +
-    '<div data-for="anthropic">' + field("apiKey", "Chiave API Anthropic" + (s.keys.ANTHROPIC_API_KEY ? " (già salvata: lascia vuoto per tenerla)" : ""), "", "password") + '<div class="meta">Resta solo su questo computer, fuori dalla cartella dello spazio.</div></div>' +
-    '<div data-for="openai"><div class="field"><label for="reasoning">Quanto ragiona il modello prima di rispondere</label><select id="reasoning">' + opt("default", "Come deciso dal server: più accurato, più lento", l.send_reasoning_effort ? "low" : "default") + opt("low", "Poco: risposte circa il 40% più rapide e più asciutte, schede meno dettagliate", l.send_reasoning_effort ? "low" : "default") + '</select></div><div class="meta">Vale per i modelli locali che "pensano" e accettano reasoning_effort (Strata, Ollama).</div></div>' +
-    '<div data-for="openai anthropic">' + field("agentModel", "Modello per rispondere", l.agent_model) + field("summaryModel", "Modello per schede e riassunti", l.summary_model) + field("judgeModel", "Modello di riserva per la verifica", l.judge_model) + "</div>" +
-    '<div class="row"><button class="primary" data-act="save-llm">Salva</button><button data-act="test">Prova il modello</button><span id="llmMsg" class="meta"></span></div></div>' +
-
-    '<div class="label">Verifica delle citazioni</div><div class="card"><div class="kv"><span>Decision model</span><span>' + judgeLine(j) + "</span><span>In uso ora</span><span>" + (s.active_judge === "nli" ? "decision model dedicato" : "modello linguistico") + "</span></div>" +
-    (j.status === "downloading" ? '<div class="bar"><div style="width:' + (100 * j.done / j.total) + '%"></div></div>' : "") +
-    (j.status === "missing" || j.status === "error" ? '<div class="row"><button data-act="download">Scarica il decision model (1,1 GB)</button><span class="meta">mDeBERTa NLI multilingue, licenza ' + esc(j.license) + ", da Hugging Face</span></div>" : "") +
-    '<div class="field"><label for="judge">Chi giudica le citazioni</label><select id="judge">' + opt("auto", "Automatico: decision model se installato", s.verify.judge) + opt("nli", "Solo decision model", s.verify.judge) + opt("llm", "Solo modello linguistico", s.verify.judge) + "</select></div>" +
-    field("threshold", "Soglia di confidenza (0–1): sotto, la citazione viene ricontrollata", s.verify.threshold, "number") +
-    '<div class="row"><button class="primary" data-act="save-verify">Salva</button><span id="verifyMsg" class="meta"></span></div></div>' +
-
-    '<div class="label">Condivisione con altre persone</div><div class="card">' +
-    '<div class="meta">Ogni persona riceve un token personale. Da questo computer non serve.</div>' +
-    (s.users.length ? s.users.map((u) => '<div class="row"><span>' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : '<div class="meta">Nessun utente.</div>') +
-    (shownToken ? '<div class="field"><label>Token di ' + esc(shownToken.name) + " (copialo ora: non verrà mostrato di nuovo)</label><div class=\"token\">" + esc(shownToken.token) + "</div></div>" : "") +
-    '<div class="row"><input type="text" id="newUser" placeholder="Nome, es. anna"><button data-act="add-user">Aggiungi utente</button></div>' +
-    '<div class="row"><label><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.users.length ? "" : " disabled") + "> Raggiungibile dagli altri computer della rete</label></div>" +
-    '<div class="meta">Indirizzo per i colleghi: http://NOME-DI-QUESTO-PC:' + s.server.port + " · MCP: http://NOME-DI-QUESTO-PC:" + s.server.port + "/mcp · Il cambio di rete vale dal prossimo avvio.</div>" +
-    '<div class="row"><button class="primary" data-act="save-share">Salva</button><span id="shareMsg" class="meta"></span></div></div>' +
-
-    '<div class="label">Indice</div><div class="card">' + field("concurrency", "Richieste al modello in parallelo", s.index.concurrency, "number") +
-    '<div class="row"><button class="primary" data-act="save-index">Salva</button><button data-act="retry">Riprova i documenti in errore</button><span id="indexMsg" class="meta"></span></div><div id="errorList" class="meta"></div></div>' +
-    (s.desktop ? '<div class="row"><button data-act="quit">Chiudi LLMWiki</button><span class="meta">Chiudere la finestra non ferma l\'app: resta l\'icona vicino all\'orologio, così l\'indicizzazione continua.</span></div>' : "") +
-    '<div class="meta" style="margin-top:10px">LLMWiki ' + esc(s.version) + (s.config_file ? " · impostazioni: " + esc(s.config_file) : "") + "</div>";
-  $("threshold").step = "0.05"; $("threshold").min = "0.05"; $("threshold").max = "0.95";
-  showProvider();
-  api("/api/admin/errors").then((d) => { if (d.errors.length) $("errorList").innerHTML = d.errors.map((e) => '<div class="warn">' + esc(e.doc) + ": " + esc(e.error) + "</div>").join(""); }).catch(() => {});
-  clearTimeout(pollTimer);
-  if (j.status === "downloading") pollTimer = setTimeout(loadSettings, 1500);
-}
-
-function showProvider() {
-  const provider = $("provider").value;
-  $("settings").querySelectorAll("[data-for]").forEach((el) => { el.hidden = !el.dataset.for.split(" ").includes(provider); });
-}
-
-$("settings").addEventListener("change", (event) => { if (event.target.id === "provider") showProvider(); });
-$("settings").addEventListener("click", async (event) => {
-  const act = event.target.dataset.act;
-  if (!act) return;
-  const say = (id, text, bad) => { const el = $(id); if (el) el.innerHTML = '<span class="' + (bad ? "warn" : "ok") + '">' + esc(text) + "</span>"; };
-  const guard = async (id, work) => { try { await work(); } catch (error) { say(id, error.message, true); } };
-  if (act === "open-folder") guard("llmMsg", () => post("/api/admin/open-folder"));
-  if (act === "quit" && confirm("Chiudere LLMWiki? L'indicizzazione in corso si ferma e riprende al prossimo avvio.")) { await post("/api/admin/quit").catch(() => {}); document.body.innerHTML = '<p style="padding:40px">LLMWiki è stato chiuso. Puoi chiudere questa finestra.</p>'; }
-  if (act === "add-space") guard("llmMsg", async () => { await post("/api/admin/spaces", { name: $("newSpace").value }); await afterSwitch(); });
-  if (act === "detect") guard("detected", async () => {
-    say("detected", "cerco…");
-    const found = (await api("/api/admin/detect")).servers;
-    if (!found.length) return say("detected", "nessun server di modelli acceso su questo computer", true);
-    $("detected").innerHTML = found.map((f, i) => '<a data-act="use" data-i="' + i + '" style="cursor:pointer;text-decoration:underline">' + esc(f.name) + ": " + esc(f.models[0]) + "</a>").join(" · ");
-    $("detected").found = found;
-  });
-  if (act === "use") { const f = $("detected").found[event.target.dataset.i]; $("baseUrl").value = f.base_url; for (const id of ["agentModel", "summaryModel", "judgeModel"]) $(id).value = f.models[0]; }
-  if (act === "save-llm") guard("llmMsg", async () => {
-    const provider = $("provider").value, llm = { provider };
-    if (provider !== "mock") Object.assign(llm, { agent_model: $("agentModel").value, summary_model: $("summaryModel").value, judge_model: $("judgeModel").value });
-    if (provider === "openai") { const quick = $("reasoning").value === "low"; Object.assign(llm, { base_url: $("baseUrl").value, send_reasoning_effort: quick, agent_effort: quick ? "low" : "high", summary_effort: quick ? "low" : "medium" }); }
-    if (provider === "anthropic" && $("apiKey").value) await post("/api/admin/secret", { name: "ANTHROPIC_API_KEY", value: $("apiKey").value });
-    settings = await post("/api/admin/settings", { llm }); renderSettings(); say("llmMsg", "salvato"); refreshStatus();
-  });
-  if (act === "test") guard("llmMsg", async () => { say("llmMsg", "provo…"); const r = await post("/api/admin/test-model"); say("llmMsg", r.ok ? "il modello risponde: " + r.reply : r.error, !r.ok); });
-  if (act === "download") guard("verifyMsg", async () => { await post("/api/admin/model/download"); loadSettings(); });
-  if (act === "save-verify") guard("verifyMsg", async () => { settings = await post("/api/admin/settings", { verify: { judge: $("judge").value, threshold: $("threshold").value } }); renderSettings(); say("verifyMsg", "salvato"); });
-  if (act === "add-user") guard("shareMsg", async () => { shownToken = await post("/api/admin/users", { name: $("newUser").value }); await loadSettings(); });
-  if (act === "del-user") guard("shareMsg", async () => { await api("/api/admin/users/" + encodeURIComponent(event.target.dataset.name), { method: "DELETE" }); shownToken = null; await loadSettings(); });
-  if (act === "save-share") guard("shareMsg", async () => { settings = await post("/api/admin/settings", { server: { host: $("shared").checked ? "0.0.0.0" : "127.0.0.1" } }); renderSettings(); say("shareMsg", "salvato: vale dal prossimo avvio"); });
-  if (act === "save-index") guard("indexMsg", async () => { settings = await post("/api/admin/settings", { index: { concurrency: $("concurrency").value } }); renderSettings(); say("indexMsg", "salvato"); });
-  if (act === "retry") guard("indexMsg", async () => { await post("/api/admin/retry-errors"); say("indexMsg", "rimessi in coda"); refreshStatus(); });
-});
-
-async function afterSwitch() {
-  if (running) running.abort();
-  await loadHistory();
-  await refreshStatus(); explore("");
-  if ($("settings").classList.contains("on")) loadSettings();
-}
-$("space").addEventListener("change", async () => {
-  try { await post("/api/admin/spaces/switch", { id: $("space").value }); await afterSwitch(); }
-  catch (error) { alert(error.message); }
-});
-$("hint").addEventListener("click", (event) => { if (event.target.dataset.go) tab(event.target.dataset.go); });
-document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
-
+// ---------------------------------------------------------------- documenti
 function crumbs(folder) {
   const parts = folder ? folder.split("/") : [];
-  let html = '<a data-folder="">wiki</a>';
-  parts.forEach((part, i) => { html += ' / <a data-folder="' + esc(parts.slice(0, i + 1).join("/")) + '">' + esc(part) + "</a>"; });
-  return '<div class="crumbs">' + html + "</div>";
+  return '<div class="crumbs"><button class="link" data-folder="">Tutti i documenti</button>' + parts.map((part, i) => ' › <button class="link" data-folder="' + esc(parts.slice(0, i + 1).join("/")) + '">' + esc(part) + "</button>").join("") + "</div>";
 }
-
+const parentOf = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 async function explore(folder) {
-  const box = $("explore");
+  const box = $("browser");
   try {
     const data = await api("/api/folder?path=" + encodeURIComponent(folder));
-    let html = crumbs(folder) + '<div class="label">Mappa della cartella</div><div class="doc">' + md(data.map) + "</div>";
-    if (data.indexing) html += '<p class="meta warn">' + esc(data.indexing) + "</p>";
+    box.dataset.folder = folder; $("folder").value = folder;
     const rows = [];
-    for (const s of data.subfolders) rows.push('<div class="item" data-folder="' + esc(s) + '"><span class="tag">cartella</span>' + esc(s.split("/").pop()) + "</div>");
-    for (const s of data.syntheses || []) rows.push('<div class="item" data-node="' + esc(s) + '"><span class="tag">sintesi</span>' + esc(s.split("::").pop()) + "</div>");
-    for (const d of data.documents) rows.push('<div class="item" data-doc="' + esc(d.doc) + '"><span class="tag">documento</span><span>' + esc(d.title || d.doc) + ' <span class="meta">' + esc(d.doc) + "</span></span></div>");
-    html += '<div class="items">' + rows.join("") + "</div>" + (data.note ? '<p class="meta">' + esc(data.note) + "</p>" : "");
-    box.innerHTML = html; box.dataset.folder = folder;
+    for (const s of data.subfolders) rows.push('<button class="item" data-folder="' + esc(s) + '"><span class="kind">Cartella</span><b>' + esc(s.split("/").pop()) + "</b></button>");
+    for (const d of data.documents) rows.push('<button class="item" data-doc="' + esc(d.doc) + '"><span class="kind">Documento</span><span><b>' + esc(d.title || d.doc.split("/").pop()) + '</b><br><span class="small muted">' + esc(d.doc.split("/").pop()) + "</span></span></button>");
+    for (const s of data.syntheses || []) rows.push('<button class="item" data-node="' + esc(s) + '"><span class="kind">Gruppo</span>Riassunto di un gruppo di documenti</button>');
+    let html = crumbs(folder);
+    if (!data.document_count && !data.subfolders.length) html += '<p class="muted">Qui non c\'è ancora niente. Trascina dei file nel riquadro qui sopra.</p>';
+    else {
+      if (data.indexing) html += '<p class="small muted">Sto ancora leggendo alcuni documenti di questa cartella: compariranno qui appena pronti.</p>';
+      html += '<div class="list">' + rows.join("") + "</div>" + (data.note ? '<p class="small muted">Sono elencati solo i primi documenti: per gli altri apri i gruppi.</p>' : "");
+      if (data.map && !data.map.startsWith("(")) html += '<details class="doc"><summary>Di cosa parla questa cartella (riassunto scritto dal modello)</summary>' + md(data.map) + "</details>";
+    }
+    if (S && S.local && S.error) html += '<div class="notice" style="margin-top:14px">' + S.error + ' file non sono stati letti. <button class="link" data-go="settings">Vedi quali e riprova</button></div>';
+    box.innerHTML = html;
   } catch (error) { box.innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; }
 }
-
 async function openNode(id) {
   const data = await api("/api/node?id=" + encodeURIComponent(id));
-  const folder = id.split("::")[0];
-  const rows = data.children.map((c) => c.kind === "doc"
-    ? '<div class="item" data-doc="' + esc(c.ref) + '"><span class="tag">documento</span>' + esc(c.title || c.ref) + "</div>"
-    : c.kind === "map"
-    ? '<div class="item" data-folder="' + esc(c.ref.split("::")[0]) + '"><span class="tag">cartella</span>' + esc(c.ref.split("::")[0]) + "</div>"
-    : '<div class="item" data-node="' + esc(c.ref) + '"><span class="tag">sintesi</span>' + esc(c.ref) + "</div>");
-  $("explore").innerHTML = crumbs(folder) + '<div class="label">Sintesi ' + esc(id) + '</div><div class="doc">' + md(data.text) + '</div><div class="items">' + rows.join("") + "</div>";
+  const rows = data.children.map((c) => c.kind === "doc" ? '<button class="item" data-doc="' + esc(c.ref) + '"><span class="kind">Documento</span><b>' + esc(c.title || c.ref) + "</b></button>"
+    : c.kind === "map" ? '<button class="item" data-folder="' + esc(c.ref.split("::")[0]) + '"><span class="kind">Cartella</span><b>' + esc(c.ref.split("::")[0]) + "</b></button>"
+    : '<button class="item" data-node="' + esc(c.ref) + '"><span class="kind">Gruppo</span>Riassunto di un gruppo di documenti</button>');
+  $("browser").innerHTML = crumbs(id.split("::")[0]) + '<div class="doc">' + md(data.text) + '</div><div class="list">' + rows.join("") + "</div>";
 }
-
 async function openDoc(doc) {
   const data = await api("/api/summary?doc=" + encodeURIComponent(doc));
-  const folder = doc.includes("/") ? doc.slice(0, doc.lastIndexOf("/")) : "";
-  $("explore").innerHTML = crumbs(folder) + '<div class="label">Scheda di ' + esc(doc) + '</div><div class="doc">' + md(data.text) + '</div><button id="fullText">Apri il testo originale</button>';
+  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="doc"><div class="small muted">Scheda scritta dal modello · ' + esc(doc) + "</div>" + md(data.text) + '</div><div class="row" style="margin-top:10px"><button id="fullText">Leggi il testo originale</button></div>';
   $("fullText").onclick = () => openText(doc, 1, 0);
 }
-
 async function openText(doc, start, end, hiStart, hiEnd) {
   const data = await api("/api/document?doc=" + encodeURIComponent(doc) + "&start=" + start + "&end=" + end);
-  const folder = doc.includes("/") ? doc.slice(0, doc.lastIndexOf("/")) : "";
-  const body = data.text.split("\n").map((line) => {
-    const n = parseInt(line, 10);  // le righe arrivano come "12| testo"; l'intestazione non ha numero
+  const body = data.text.split("\n").slice(1).map((line) => {
+    const n = parseInt(line, 10);  // le righe arrivano come "12| testo"
     return '<span class="ln' + (hiStart && n >= hiStart && n <= hiEnd ? " hi" : "") + '">' + (esc(line) || " ") + "</span>";
   }).join("");
-  $("explore").innerHTML = crumbs(folder) + '<div class="label">Testo originale' + (hiStart ? " · righe citate evidenziate" : "") + "</div><pre>" + body + "</pre>";
-  tab("explore");
-  const first = $("explore").querySelector(".hi");
-  if (first) first.scrollIntoView({ block: "center" });
+  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="small muted" style="margin-top:10px">' + esc(doc) + (hiStart ? " · le righe citate sono evidenziate" : "") + '</div><pre class="text">' + body + "</pre>";
+  $("browser").querySelector(".hi")?.scrollIntoView({ block: "center" });
 }
-
-$("explore").addEventListener("click", (event) => {
-  const el = event.target.closest("[data-folder],[data-node],[data-doc]");
-  if (!el) return;
-  const fail = (error) => { $("explore").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; };
+$("browser").addEventListener("click", (event) => {
+  const el = event.target.closest("[data-folder],[data-node],[data-doc]"); if (!el) return;
+  const fail = (error) => { $("browser").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; };
   if (el.dataset.folder !== undefined) explore(el.dataset.folder);
   else if (el.dataset.node) openNode(el.dataset.node).catch(fail);
   else if (el.dataset.doc) openDoc(el.dataset.doc).catch(fail);
 });
-
 async function uploadFiles(files) {
   if (!files.length) return;
-  const body = new FormData();
-  for (const file of files) body.append("files", file);
+  const body = new FormData(); for (const file of files) body.append("files", file);
   body.append("folder", $("folder").value.trim());
-  $("uploadLog").textContent = "Carico " + files.length + " file…";
+  $("uploadMsg").textContent = "Carico " + files.length + " file…";
   try {
     const data = await api("/api/upload", { method: "POST", body });
-    $("uploadLog").innerHTML = "Caricati: " + data.saved.length + (data.rejected.length ? ' · <span class="warn">scartati: ' + data.rejected.map((r) => esc(r.file)).join(", ") + "</span>" : "") + ". L'indicizzazione parte da sola.";
-    refreshStatus();
-  } catch (error) { $("uploadLog").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; }
+    $("uploadMsg").innerHTML = '<span class="ok">' + data.saved.length + (data.saved.length === 1 ? " file aggiunto" : " file aggiunti") + ": li sto leggendo.</span>" + (data.rejected.length ? ' <span class="warn">Non posso leggere: ' + data.rejected.map((r) => esc(r.file)).join(", ") + "</span>" : "");
+    await refreshStatus(); explore($("folder").value.trim());
+  } catch (error) { $("uploadMsg").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; }
 }
 $("pick").onclick = () => $("files").click();
 $("files").onchange = () => { uploadFiles([...$("files").files]); $("files").value = ""; };
-const drop = $("drop");
-drop.ondragover = (event) => { event.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = (event) => { event.preventDefault(); drop.classList.remove("over"); uploadFiles([...event.dataTransfer.files]); };
+$("drop").ondragover = (event) => { event.preventDefault(); $("drop").classList.add("over"); };
+$("drop").ondragleave = () => $("drop").classList.remove("over");
+$("drop").ondrop = (event) => { event.preventDefault(); $("drop").classList.remove("over"); uploadFiles([...event.dataTransfer.files]); };
+$("openFolder").onclick = () => post("/api/admin/open-folder").catch((error) => alert(error.message));
 
-let wasBusy = false;
-async function refreshStatus() {
-  try {
-    const s = await api("/api/status");
-    $("tokenBtn").hidden = s.local || !s.auth;
-    $("settingsTab").hidden = !s.local;
-    if (s.spaces && s.local) {
-      const sel = $("space"), wanted = s.spaces.map((x) => x.id + "\u0000" + x.name).join("\u0001");
-      if (sel.dataset.sig !== wanted) { sel.innerHTML = s.spaces.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.name) + "</option>").join(""); sel.dataset.sig = wanted; }
-      if (document.activeElement !== sel) sel.value = s.space;
-      sel.hidden = false;
-    }
-    const hint = $("hint");
-    if (s.local && s.provider === "mock") { hint.hidden = false; hint.innerHTML = 'Modalità demo: le risposte sono finte. <a data-go="settings">Collega un modello</a> per usarla davvero.'; }
-    else if (s.total === 0) { hint.hidden = false; hint.innerHTML = 'Questo spazio è vuoto: <a data-go="upload">carica dei documenti</a> o copiali nella cartella dello spazio.'; }
-    else if (s.error && s.local) { hint.hidden = false; hint.innerHTML = s.error + (s.error === 1 ? " documento non è stato indicizzato" : " documenti non sono stati indicizzati") + ' (modello non raggiungibile o file illeggibile): <a data-go="settings">apri Impostazioni</a> per vedere il motivo e riprovare.'; }
-    else hint.hidden = true;
-    const queue = s.pending + s.indexing;
-    $("status").className = "pill " + (s.busy ? "busy" : "ready");
-    $("status").textContent = s.busy ? "indicizzo… " + s.ready + "/" + s.total + " documenti" : s.ready + " documenti pronti";
-    $("statusDetail").innerHTML = "<span>Pronti</span><span>" + s.ready + "</span><span>In coda</span><span>" + queue + "</span><span>Errori</span><span class='" + (s.error ? "warn" : "") + "'>" + s.error + "</span><span>Nodi dell'albero</span><span>" + s.nodes + "</span><span>Modello</span><span>" + esc(s.provider) + "</span>" + (s.last_error ? "<span>Ultimo errore</span><span class='warn'>" + esc(s.last_error) + "</span>" : "");
-    if (wasBusy && !s.busy && $("explore").dataset.folder !== undefined) explore($("explore").dataset.folder);
-    wasBusy = s.busy;
-  } catch (error) { $("status").className = "pill busy"; $("status").textContent = error.message; }
+// ---------------------------------------------------------------- impostazioni (solo dal computer dell'app)
+async function loadSettings() {
+  try { settings = await api("/api/admin/settings"); renderSettings(); }
+  catch (error) { $("settingsPage").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; }
 }
-refreshStatus(); setInterval(refreshStatus, 3000); explore(""); loadHistory();
+const isLocalUrl = (url) => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/.test(url || "");
+function presetOf(l) {
+  if (l.provider === "mock") return "demo";
+  if (l.provider === "anthropic") return "anthropic";
+  const known = settings.providers.find((p) => p.base_url && p.base_url === l.base_url);
+  return known ? known.id : isLocalUrl(l.base_url) ? "locale" : "altro";
+}
+const opt = (value, label, current) => '<option value="' + esc(value) + '"' + (value === current ? " selected" : "") + ">" + esc(label) + "</option>";
+const field = (id, label, value, type, hint) => '<div class="field"><label for="' + id + '">' + label + '</label><input type="' + (type || "text") + '" id="' + id + '" value="' + esc(value) + '"' + (type ? "" : ' list="modelList"') + ">" + (hint ? '<span class="small muted">' + hint + "</span>" : "") + "</div>";
+
+function probeReport(p) {
+  if (!p) return "";
+  if (!p.ok) return '<div class="notice"><b>Il modello non risponde.</b> ' + esc(p.error) + "<br>Controlla che sia acceso, che l'indirizzo sia giusto e che la chiave sia valida.</div>";
+  const lines = ["✓ Il modello risponde."];
+  lines.push(p.tools === "native" ? "✓ Sa cercare da solo nei documenti." : p.tools === "text" ? "✓ Sa cercare nei documenti, in modalità compatibile (un po' più lenta)." : "⚠ Non riesce a cercare da solo nei documenti: l'app cercherà al posto suo, con risposte meno complete. Un modello più capace dà risultati migliori.");
+  lines.push(p.logprobs ? "✓ Può anche controllare le citazioni in modo rapido." : "· Per il controllo delle citazioni conviene il verificatore qui sotto.");
+  return '<div class="notice ' + (p.tools ? "good" : "") + '">' + lines.join("<br>") + "</div>";
+}
+function judgeLine(j) {
+  return j.status === "ready" ? '<span class="ok">✓ installato</span>' : j.status === "downloading" ? "scarico… " + Math.round(100 * j.done / j.total) + "%" : j.status === "error" ? '<span class="warn">scaricamento non riuscito: ' + esc(j.error) + "</span>" : "non installato";
+}
+
+function renderSettings() {
+  const s = settings, l = s.llm, j = s.judge_model, preset = presetOf(l), shared = !["127.0.0.1", "localhost"].includes(s.server.host);
+  const same = l.summary_model === l.agent_model && l.judge_model === l.agent_model;
+  $("settingsPage").innerHTML = "<h2>Impostazioni</h2>" +
+    '<div class="card"><h3>Modello</h3><p class="muted small" style="margin:0">È il programma che legge i documenti e scrive le risposte. Puoi usarne uno sul tuo computer o un servizio online: l\'app funziona allo stesso modo.</p>' +
+      '<div class="field"><label for="preset">Quale modello usare</label><select id="preset">' + s.providers.map((p) => opt(p.id, p.name, preset)).join("") + opt("demo", "Nessuno: prova dimostrativa con risposte finte", preset) + "</select></div>" +
+      '<div data-for="locale altro"><div class="field"><label for="baseUrl">Indirizzo del modello</label><input type="text" id="baseUrl" value="' + esc(l.base_url) + '" placeholder="http://127.0.0.1:8080/v1"></div></div>' +
+      '<div data-for="locale" class="row"><button data-act="detect">Cerca i modelli accesi su questo computer</button><span id="detectMsg" class="small"></span></div>' +
+      '<div data-for="cloud"><div class="field"><label for="apiKey">Chiave di accesso (API key)</label><input type="password" id="apiKey" autocomplete="off" placeholder="incolla qui la chiave"><span class="small muted" id="keyHint"></span></div></div>' +
+      '<div data-for="any"><div class="row"><button data-act="models">Mostra i modelli disponibili</button><span id="modelsMsg" class="small"></span></div><datalist id="modelList"></datalist>' +
+        field("agentModel", "Modello", l.agent_model, "", "Scrivi il nome o sceglilo dall'elenco dopo aver premuto il pulsante qui sopra.") + "</div>" +
+      '<details data-for="any"' + (same && !l.send_reasoning_effort && l.tool_mode === "auto" ? "" : " open") + "><summary>Opzioni avanzate</summary><div style=\"display:grid;gap:12px\">" +
+        field("summaryModel", "Modello per i riassunti dei documenti", same ? "" : l.summary_model, "", "Vuoto = lo stesso. Un modello più piccolo qui rende più veloce la lettura dei documenti.") +
+        field("judgeModel", "Modello per il controllo delle citazioni", same ? "" : l.judge_model, "", "Vuoto = lo stesso.") +
+        '<div class="field"><label for="reasoning">Quanto ragiona prima di rispondere</label><select id="reasoning">' + opt("default", "Come deciso dal modello: più accurato, più lento", l.send_reasoning_effort ? "low" : "default") + opt("low", "Poco: risposte circa il 40% più rapide e più asciutte", l.send_reasoning_effort ? "low" : "default") + '</select><span class="small muted">Vale per i modelli locali che "pensano".</span></div>' +
+        '<div class="field"><label for="toolMode">Come cerca nei documenti</label><select id="toolMode">' + opt("auto", "Automatico (consigliato)", l.tool_mode) + opt("native", "Solo con gli strumenti del modello", l.tool_mode) + opt("text", "Solo in modalità compatibile", l.tool_mode) + "</select></div></div></details>" +
+      '<div class="row"><button class="primary" data-act="save-llm">Salva e prova</button><span id="llmMsg" class="small"></span></div><div id="probe">' + probeReport(lastProbe) + "</div></div>" +
+
+    '<div class="card"><h3>Controllo delle citazioni</h3><p class="muted small" style="margin:0">Dopo ogni risposta l\'app confronta ciò che è stato affermato con il testo citato. Il verificatore è un piccolo programma che lo fa in un attimo, sul tuo computer, senza dipendere dal modello.</p>' +
+      '<div class="row"><b>Verificatore:</b> ' + judgeLine(j) + (j.status === "missing" || j.status === "error" ? ' <button data-act="download">Scarica (1,1 GB)</button>' : "") + "</div>" +
+      (j.status === "downloading" ? '<div class="bar"><div style="width:' + (100 * j.done / j.total) + '%"></div></div>' : "") +
+      '<details><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px"><div class="field"><label for="judge">Chi controlla le citazioni</label><select id="judge">' + opt("auto", "Automatico: il verificatore, poi il modello sui casi dubbi", s.verify.judge) + opt("nli", "Solo il verificatore", s.verify.judge) + opt("llm", "Solo il modello", s.verify.judge) + "</select></div>" +
+      '<div class="field"><label for="threshold">Quanto deve essere sicuro per confermare (da 0 a 1)</label><input type="number" id="threshold" min="0.05" max="0.95" step="0.05" value="' + esc(s.verify.threshold) + '"></div>' +
+      '<div class="row"><button data-act="save-verify">Salva</button><span id="verifyMsg" class="small"></span></div></div></details></div>' +
+
+    (s.desktop ? '<div class="card"><h3>Spazi</h3><p class="muted small" style="margin:0">Uno spazio è una raccolta separata di documenti: per esempio uno per lo studio e uno per il lavoro. Si cambia dal menu in alto a sinistra.</p><div class="row"><input type="text" id="newSpace" placeholder="Nome del nuovo spazio, per esempio: Studio" style="flex:1;min-width:200px"><button data-act="add-space">Crea</button></div><span id="spaceMsg" class="small"></span><div class="small muted">I documenti di questo spazio sono in <code>' + esc(s.docs_dir) + "</code></div></div>" : "") +
+
+    '<div class="card"><h3>Usarla con altre persone</h3><p class="muted small" style="margin:0">Le altre persone aprono LLMWiki dal loro browser e vedono gli stessi documenti. Ognuna riceve un codice personale (token).</p>' +
+      (s.users.length ? s.users.map((u) => '<div class="row"><span style="flex:1">' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : "") +
+      (shownToken ? '<div class="field"><label>Token di ' + esc(shownToken.name) + " (copialo adesso: non verrà mostrato di nuovo)</label><div class=\"token\">" + esc(shownToken.token) + "</div></div>" : "") +
+      '<div class="row"><input type="text" id="newUser" placeholder="Nome della persona, per esempio: anna" style="flex:1;min-width:200px"><button data-act="add-user">Aggiungi</button></div>' +
+      '<label class="row"><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.users.length ? "" : " disabled") + "> Rendi l'app raggiungibile dagli altri computer della rete</label>" +
+      '<div class="small muted">' + (s.users.length ? "Indirizzo da dare agli altri: <code>http://NOME-DI-QUESTO-COMPUTER:" + s.server.port + "</code>. La modifica vale dal prossimo avvio dell'app." : "Aggiungi almeno una persona per poter condividere.") + '</div><div class="row"><button data-act="save-share">Salva</button><span id="shareMsg" class="small"></span></div></div>' +
+
+    '<div class="card"><h3>Lettura dei documenti</h3><div id="errorList" class="small"></div>' +
+      '<details><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' + field("concurrency", "Quanti documenti leggere insieme", s.index.concurrency, "number", "Con un modello sul tuo computer di solito 1 o 2; con un servizio online anche 8.") + '<div class="row"><button data-act="save-index">Salva</button><span id="indexMsg" class="small"></span></div></div></details></div>' +
+
+    (s.desktop ? '<div class="card"><h3>Chiudere l\'app</h3><p class="muted small" style="margin:0">Chiudere la finestra non ferma LLMWiki: resta l\'icona vicino all\'orologio, così la lettura dei documenti continua.</p><div class="row"><button data-act="quit">Chiudi LLMWiki</button></div></div>' : "") +
+    '<p class="small muted">LLMWiki ' + esc(s.version) + "</p>";
+  showPreset();
+  api("/api/admin/errors").then((d) => {
+    $("errorList").innerHTML = d.errors.length ? "<b>" + d.errors.length + " file non letti</b>" + d.errors.map((e) => '<div class="warn">' + esc(e.doc) + ": " + esc(e.error) + "</div>").join("") + '<div class="row" style="margin-top:8px"><button data-act="retry">Riprova a leggerli</button></div>' : '<span class="muted">Tutti i file sono stati letti senza problemi.</span>';
+  }).catch(() => {});
+  if (j.status === "downloading") setTimeout(() => { if ($("settings").classList.contains("on")) loadSettings(); }, 1500);
+}
+function showPreset() {
+  const id = $("preset").value, p = settings.providers.find((x) => x.id === id) || { key: "" };
+  const tags = id === "demo" ? [] : ["any", id === "locale" || id === "altro" ? id : "", p.key ? "cloud" : ""];
+  $("settingsPage").querySelectorAll("[data-for]").forEach((el) => { el.hidden = !el.dataset.for.split(" ").some((t) => tags.includes(t)); });
+  if (p.key) $("keyHint").textContent = settings.keys[p.key] ? "Una chiave è già salvata su questo computer: lascia vuoto per tenerla." : "La chiave resta solo su questo computer.";
+  if (p.base_url) $("baseUrl").value = p.base_url;
+}
+function formLlm() {
+  const id = $("preset").value;
+  if (id === "demo") return { provider: "mock" };
+  const p = settings.providers.find((x) => x.id === id), main = $("agentModel").value.trim(), quick = $("reasoning").value === "low";
+  return { provider: p.provider, base_url: p.base_url || $("baseUrl").value.trim(), api_key_env: p.key, agent_model: main,
+    summary_model: $("summaryModel").value.trim() || main, judge_model: $("judgeModel").value.trim() || main,
+    context_tokens: modelContexts[main] || (main === settings.llm.agent_model ? settings.llm.context_tokens : 0),
+    tool_mode: $("toolMode").value, send_reasoning_effort: quick, agent_effort: quick ? "low" : "high", summary_effort: quick ? "low" : "medium" };
+}
+async function saveKey() {
+  const p = settings.providers.find((x) => x.id === $("preset").value);
+  if (p && p.key && $("apiKey").value.trim()) { const r = await post("/api/admin/secret", { name: p.key, value: $("apiKey").value.trim() }); settings.keys = r.keys; }
+}
+async function loadModels(say) {
+  const l = formLlm();
+  await saveKey();
+  const data = await post("/api/admin/models", { provider: l.provider, base_url: l.base_url || "", api_key_env: l.api_key_env || "" });
+  modelContexts = Object.fromEntries(data.models.map((m) => [m.id, m.context]));
+  $("modelList").innerHTML = data.models.map((m) => '<option value="' + esc(m.id) + '">').join("");
+  if (data.models.length && !$("agentModel").value.trim()) $("agentModel").value = data.models[0].id;
+  say("modelsMsg", data.models.length ? data.models.length + (data.models.length === 1 ? " modello trovato." : " modelli trovati: scegline uno nel campo qui sotto.") : "Nessun modello trovato.", !data.models.length);
+}
+$("settingsPage").addEventListener("change", (event) => { if (event.target.id === "preset") { $("agentModel").value = ""; showPreset(); } });
+$("settingsPage").addEventListener("click", async (event) => {
+  const act = event.target.dataset.act; if (!act) return;
+  const say = (id, text, bad) => { const el = $(id); if (el) el.innerHTML = '<span class="' + (bad ? "warn" : "ok") + '">' + esc(text) + "</span>"; };
+  const guard = async (id, work) => { try { await work(); } catch (error) { say(id, error.message, true); } };
+  if (act === "detect") guard("detectMsg", async () => {
+    say("detectMsg", "cerco…");
+    const found = (await api("/api/admin/detect")).servers;
+    if (!found.length) return say("detectMsg", "Non ho trovato modelli accesi. Avvia il programma che usi (Strata, Ollama, LM Studio…) e riprova.", true);
+    $("baseUrl").value = found[0].base_url; $("agentModel").value = found[0].models[0];
+    say("detectMsg", "Trovato " + found[0].name + ": " + found[0].models[0]);
+    await loadModels(say);
+  });
+  if (act === "models") guard("modelsMsg", () => loadModels(say));
+  if (act === "save-llm") guard("llmMsg", async () => {
+    const llm = formLlm();
+    if (llm.provider !== "mock" && !llm.agent_model) throw new Error("Scrivi o scegli il nome del modello.");
+    await saveKey();
+    say("llmMsg", "salvo e provo il modello…");
+    settings = await post("/api/admin/settings", { llm });
+    lastProbe = llm.provider === "mock" ? null : await post("/api/admin/test-model");
+    renderSettings(); say("llmMsg", "Salvato."); refreshStatus();
+  });
+  if (act === "download") guard("verifyMsg", async () => { await post("/api/admin/model/download"); loadSettings(); });
+  if (act === "save-verify") guard("verifyMsg", async () => { settings = await post("/api/admin/settings", { verify: { judge: $("judge").value, threshold: $("threshold").value } }); renderSettings(); say("verifyMsg", "Salvato."); });
+  if (act === "add-space") guard("spaceMsg", async () => { await post("/api/admin/spaces", { name: $("newSpace").value }); await afterSwitch(); show("docs"); });
+  if (act === "add-user") guard("shareMsg", async () => { shownToken = await post("/api/admin/users", { name: $("newUser").value.trim() }); await loadSettings(); });
+  if (act === "del-user") guard("shareMsg", async () => { await api("/api/admin/users/" + encodeURIComponent(event.target.dataset.name), { method: "DELETE" }); shownToken = null; await loadSettings(); });
+  if (act === "save-share") guard("shareMsg", async () => { settings = await post("/api/admin/settings", { server: { host: $("shared").checked ? "0.0.0.0" : "127.0.0.1" } }); renderSettings(); say("shareMsg", "Salvato: vale dal prossimo avvio."); });
+  if (act === "save-index") guard("indexMsg", async () => { settings = await post("/api/admin/settings", { index: { concurrency: $("concurrency").value } }); renderSettings(); say("indexMsg", "Salvato."); });
+  if (act === "retry") { await post("/api/admin/retry-errors").catch(() => {}); await refreshStatus(); loadSettings(); }
+  if (act === "quit" && confirm("Chiudere LLMWiki? La lettura dei documenti in corso riprenderà al prossimo avvio.")) { await post("/api/admin/quit").catch(() => {}); document.body.innerHTML = '<p style="padding:40px">LLMWiki è stato chiuso. Puoi chiudere questa finestra.</p>'; }
+});
+
+async function afterSwitch() {
+  if (running) running.abort();
+  $("browser").dataset.folder = ""; lastProbe = null;
+  await refreshStatus(); await loadHistory();
+  if ($("settings").classList.contains("on")) loadSettings();
+  if ($("docs").classList.contains("on")) explore("");
+}
+$("space").addEventListener("change", async () => {
+  try { await post("/api/admin/spaces/switch", { id: $("space").value }); await afterSwitch(); } catch (error) { alert(error.message); }
+});
+
+(async () => {
+  await refreshStatus();
+  await loadHistory();
+  if (S && S.local && S.provider === "mock") { detected = (await api("/api/admin/detect").catch(() => ({ servers: [] }))).servers; renderWelcome(); }
+  setInterval(refreshStatus, 3000);
+})();
 </script>
 </body>
 </html>

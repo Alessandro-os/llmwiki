@@ -94,6 +94,42 @@ def test_spaces_settings_and_users_from_the_ui(tmp_path):
     assert {s["name"] for s in apphome.Registry().spaces} == {"Studio", "Lavoro"}
 
 
+def test_any_provider_can_be_configured_from_the_ui(tmp_path):
+    cfg = mock_cfg(tmp_path)
+    cfg.path = tmp_path / "wiki.toml"
+    cfg.save()
+    with TestClient(create_app(Wiki(cfg)), **LOCAL) as client:
+        settings = client.get("/api/admin/settings").json()
+        providers = {p["id"]: p for p in settings["providers"]}
+        assert {"locale", "anthropic", "openai", "gemini", "openrouter", "altro"} <= set(providers)
+        assert all(p["provider"] in ("anthropic", "openai") for p in providers.values())
+        assert settings["keys"]["OPENAI_API_KEY"] is False
+
+        # la chiave di un fornitore qualsiasi si salva fuori dallo spazio, e non torna mai indietro
+        keys = client.post("/api/admin/secret", json={"name": "OPENROUTER_API_KEY", "value": "sk-finta"}).json()["keys"]
+        assert keys["OPENROUTER_API_KEY"] is True and "sk-finta" not in str(keys)
+        assert "sk-finta" not in (tmp_path / "wiki.toml").read_text(encoding="utf-8")
+        assert client.post("/api/admin/secret", json={"name": "PATH", "value": "x"}).status_code == 400
+
+        # elenco dei modelli del fornitore scelto nel modulo, prima ancora di salvare
+        models = client.post("/api/admin/models", json={"provider": "mock", "base_url": "", "api_key_env": ""})
+        assert models.json() == {"models": [{"id": "demo", "context": 0}]}
+        assert client.post("/api/admin/models", json={"provider": "boh"}).status_code == 400
+
+        saved = client.post("/api/admin/settings", json={"llm": {
+            "provider": "openai", "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY",
+            "agent_model": "un/modello", "summary_model": "un/modello", "judge_model": "un/modello",
+            "context_tokens": 8192, "tool_mode": "text"}}).json()
+        assert saved["llm"]["api_key_env"] == "OPENROUTER_API_KEY" and saved["llm"]["context_tokens"] == 8192
+        stored = Config.load(tmp_path / "wiki.toml").llm
+        assert (stored.provider, stored.tool_mode, stored.context_tokens) == ("openai", "text", 8192)
+        assert client.post("/api/admin/settings", json={"llm": {"tool_mode": "magia"}}).status_code == 400
+
+        # la diagnosi dice in chiaro se il modello risponde: qui l'indirizzo non esiste
+        report = client.post("/api/admin/settings", json={"llm": {"base_url": "http://127.0.0.1:9/v1"}})
+        assert report.status_code == 200
+
+
 def test_live_progress_history_and_follow_up(tmp_path):
     import json
 

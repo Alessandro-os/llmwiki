@@ -57,6 +57,31 @@ confrontandolo su citazioni italiane giuste e sbagliate: non ne ha accettata nes
 Da solo respinge una parte delle citazioni corrette più lunghe, ed è per questo che è il primo
 filtro di una cascata e non l'unico giudice.
 
+## Indipendenza dal modello
+
+Il resto del codice parla solo con l'interfaccia `LLM` (`src/llmwiki/llm.py`): cambiare modello
+significa cambiare un'impostazione. Due backend coprono tutto: l'SDK di Anthropic per Claude e
+il protocollo di OpenAI per tutti gli altri (OpenAI, Gemini, OpenRouter, Mistral, Groq, Ollama,
+LM Studio, llama.cpp, vLLM, Strata). Aggiungere un fornitore compatibile è una riga in
+`PROVIDERS` (`app.py`).
+
+Ogni capacità che non tutti i modelli hanno ha un ripiego, scelto da solo:
+
+| Se il modello o il server... | l'app... |
+|---|---|
+| non accetta le chiamate a strumenti, o non le usa | descrive gli strumenti nel prompt e legge le chiamate da un oggetto JSON |
+| non segue nemmeno quel protocollo | cerca da sé i passaggi più vicini alla domanda e chiede una risposta fondata solo su quelli |
+| non impone uno schema all'uscita | mette lo schema nel prompt e legge la risposta con tolleranza |
+| non espone i logprob | usa il verificatore locale e, sui casi dubbi, un punteggio dichiarato dal modello |
+| rifiuta un parametro facoltativo (effort, cache, rilancio dei rifiuti) | lo toglie, riprova e non lo manda più |
+| ha una finestra di contesto piccola | legge i documenti lunghi a pezzi più corti e alleggerisce la conversazione |
+| è spento, sovraccarico o limita le richieste | lascia i documenti in coda e riprova da solo, senza segnarli come errore |
+
+Che cosa è stato provato davvero: il modello locale (Qwen su Strata) sia con le chiamate native
+sia costretto al protocollo testuale; tutti gli altri comportamenti contro server finti nei
+test. I servizi online (Claude, OpenAI, Gemini, OpenRouter, Mistral, Groq) non sono stati
+provati dal vivo, perché servono le rispettive chiavi.
+
 ## Misure
 
 Rilevate il 2026-11-14 con `evals/run.py` su un PC con RTX 3080 Ti, modello locale Qwen 3.8
@@ -67,6 +92,7 @@ esempio: indicano che il meccanismo funziona, non sono un benchmark.
 |---|---|
 | Risposte corrette, ragionamento predefinito | 9 su 9 · 41 citazioni, nessuna non confermata · 111 s di media |
 | Raccolta difficile: 64 documenti, di cui 16 contratti quasi identici | 23 risposte corrette su 24 · 102 citazioni, 1 non confermata (a ragione: un confronto tra due documenti citato su uno solo) · 110 s di media · indice in 47 minuti |
+| Stesse 9 domande senza strumenti nativi (protocollo testuale) | 9 su 9 · 17 citazioni, nessuna non confermata · 150 s di media |
 | Risposte corrette, ragionamento ridotto | 9 su 9 · 18 citazioni, nessuna non confermata · 68 s di media |
 | Decision model su 32 citazioni italiane | 0 sbagliate accettate, 0 giuste respinte · circa 160 ms l'una sulla CPU |
 | Giudice del modello linguistico (logprob) sugli stessi casi | 0 sbagliate accettate, 1 giusta respinta · circa 2,3 s l'una |

@@ -3,41 +3,59 @@ LLMWiki
 
 Fai domande ai tuoi documenti (contratti, policy, verbali, appunti di studio) e ricevi
 risposte in cui ogni affermazione rimanda alle righe del documento da cui viene. Ogni
-citazione viene controllata: ✓ se il testo citato la sostiene, ⚠ se non la sostiene.
+citazione viene controllata: ✓ se il testo citato la conferma, ⚠ se non basta a confermarla.
 
-COME SI USA
-1. Fai doppio clic su LLMWiki.exe. Si apre una finestra e compare un'icona vicino all'orologio.
-2. Al primo avvio viene creato lo spazio "Personale" in Documenti\LLMWiki\Personale.
-   Se sul computer è acceso un modello locale (Strata, Ollama, LM Studio...) viene collegato
-   da solo; altrimenti apri Impostazioni e scegli dove gira il modello.
-3. In Impostazioni scarica il decision model (1,1 GB, una volta sola): è il piccolo modello
-   che controlla le citazioni.
-4. Carica i documenti dalla scheda Carica, oppure copiali nella cartella dello spazio
-   (Impostazioni > Apri la cartella dei documenti). L'indicizzazione parte da sola.
-5. Chiedi. Mentre risponde vedi cosa sta leggendo; con "Ferma" interrompi la domanda.
-   Puoi fare domande di approfondimento: l'app ricorda gli scambi precedenti dello spazio.
-   "Nuova conversazione" in alto svuota la conversazione.
-6. Clicca su una citazione per vedere il testo su cui è stata verificata, con le righe
-   evidenziate nel documento originale.
+COME SI COMINCIA
+Apri LLMWiki. Compare una finestra con tre passi:
+
+1. Collega un modello. È il programma che legge i documenti e scrive le risposte.
+   - Se ne hai uno acceso sul computer (Strata, Ollama, LM Studio...) l'app lo trova da sola:
+     basta premere "Usa questo".
+   - Altrimenti vai in Impostazioni e scegli un servizio online (Claude, OpenAI, Gemini,
+     OpenRouter, Mistral, Groq o un altro compatibile): incolli la chiave, premi "Mostra i
+     modelli disponibili", ne scegli uno e premi "Salva e prova". L'app ti dice subito se
+     funziona.
+2. Scarica il verificatore delle citazioni (1,1 GB, una volta sola). È consigliato: controlla
+   le citazioni in un attimo, sul tuo computer, qualunque modello tu usi.
+3. Aggiungi i documenti: nella sezione Documenti trascini i file, oppure li copi nella
+   cartella dello spazio. L'app li legge da sola; in basso a sinistra vedi a che punto è.
+
+Poi scrivi la domanda in "Chiedi".
+
+COME SI LEGGE UNA RISPOSTA
+- I numeri colorati nel testo sono le citazioni: cliccandoli vedi cosa afferma la risposta e
+  cosa dice davvero il documento, e puoi aprire il documento in quel punto.
+- ⚠ significa "non confermata": la frase può essere giusta, ma il testo citato non basta a
+  provarla. Controlla la fonte prima di fidarti.
+- Puoi fare domande di approfondimento ("spiegami meglio il secondo punto").
+- "Ferma" interrompe una risposta in corso; "Nuova conversazione" ricomincia da capo.
 
 SPAZI
 Uno spazio è una raccolta separata di documenti: uno per lo studio, uno per il lavoro, uno
-per l'azienda. Si creano da Impostazioni e si cambiano dal menu in alto.
+per l'azienda. Si creano da Impostazioni e si cambiano dal menu in alto a sinistra.
 
 CON ALTRE PERSONE
-Impostazioni > Condivisione: crea un utente per ogni collega (riceve un token personale) e
-attiva "Raggiungibile dagli altri computer della rete". I colleghi aprono nel browser
-http://NOME-DEL-TUO-PC:8765 e incollano il token. Lo stesso indirizzo con /mcp in fondo
-collega la wiki a Claude e agli altri programmi che parlano MCP.
+Impostazioni > "Usarla con altre persone": aggiungi una persona (riceve un token personale)
+e attiva "Rendi l'app raggiungibile dagli altri computer della rete". Gli altri aprono nel
+browser http://NOME-DEL-TUO-COMPUTER:8765 e incollano il token. Lo stesso indirizzo con /mcp
+in fondo collega la wiki a Claude e agli altri programmi che parlano MCP.
+
+SE QUALCOSA NON VA
+- "Il modello non risponde": controlla che il programma del modello sia acceso, poi
+  Impostazioni > "Salva e prova". Se il modello si spegne mentre l'app legge i documenti,
+  l'app aspetta e riprende da sola quando torna.
+- Un file non viene letto: Impostazioni > "Lettura dei documenti" dice quale e perché. I PDF
+  fatti di sole immagini (scansioni) non hanno testo da leggere.
+- L'app non si apre: i dettagli sono in %LOCALAPPDATA%\LLMWiki\logs\llmwiki.log
 
 DOVE STANNO I DATI
 - Documenti e indice: nella cartella di ogni spazio (si può copiare o spostare intera).
-- Impostazioni dell'app, decision model e log: %LOCALAPPDATA%\LLMWiki
-Per disinstallare basta cancellare questa cartella e quelle due.
+- Impostazioni dell'app, chiavi, verificatore e log: %LOCALAPPDATA%\LLMWiki
+La disinstallazione toglie il programma e lascia intatti documenti e spazi.
 
 CHIUDERE
-Chiudere la finestra non ferma l'app (così l'indicizzazione continua): per chiuderla usa
-l'icona vicino all'orologio > Esci, oppure Impostazioni > Chiudi LLMWiki.
+Chiudere la finestra non ferma l'app (così la lettura dei documenti continua): per chiuderla
+usa l'icona vicino all'orologio > Esci, oppure Impostazioni > Chiudi LLMWiki.
 
 PER CHI VUOLE LA RIGA DI COMANDO
 llmwiki-cli.exe --help   (server senza interfaccia, indicizzazione, MCP su stdio)

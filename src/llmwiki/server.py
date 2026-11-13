@@ -16,7 +16,7 @@ import os
 import subprocess
 import sys
 from contextlib import asynccontextmanager
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -25,10 +25,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import __version__
-from .app import SECRET_NAMES, Hub, Wiki, add_user, detect_local_servers, save_secret
+from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, save_secret
 from .config import LOOPBACK, Config
 from .extract import SUPPORTED
-from .llm import LLMError
+from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
 from .store import norm_path
 from .tools import ToolError
@@ -38,8 +38,8 @@ WEB_DIR = Path(__file__).parent / "web"
 PUBLIC_PATHS = {"/", "/favicon.ico"}
 # Le impostazioni che si possono cambiare dall'interfaccia; le altre solo a mano nel file.
 EDITABLE = {
-    "llm": {"provider", "base_url", "agent_model", "summary_model", "judge_model",
-            "send_reasoning_effort", "agent_effort", "summary_effort"},
+    "llm": {"provider", "base_url", "api_key_env", "agent_model", "summary_model", "judge_model",
+            "send_reasoning_effort", "agent_effort", "summary_effort", "tool_mode", "context_tokens"},
     "index": {"concurrency", "fanout"},
     "verify": {"enabled", "judge", "threshold"},
     "server": {"host", "port"},
@@ -119,6 +119,8 @@ def apply_settings(cfg: Config, patch: dict) -> None:
             setattr(target, key, CASTS[kinds[key]](value))
     if cfg.llm.provider not in ("anthropic", "openai", "mock"):
         raise ValueError("provider: anthropic, openai oppure mock")
+    if cfg.llm.tool_mode not in ("auto", "native", "text"):
+        raise ValueError("llm.tool_mode: auto, native oppure text")
     if cfg.verify.judge not in ("auto", "nli", "llm"):
         raise ValueError("verify.judge: auto, nli oppure llm")
     if not 0 < cfg.verify.threshold < 1:
@@ -129,6 +131,11 @@ def apply_settings(cfg: Config, patch: dict) -> None:
         raise ValueError("per condividere in rete crea prima almeno un utente")
 
 
+def _saved_keys() -> dict:
+    """Per ogni fornitore, se la sua chiave è già disponibile (mai il valore)."""
+    return {p["key"]: bool(os.environ.get(p["key"])) for p in PROVIDERS if p["key"]}
+
+
 def _settings(hub: Hub) -> dict:
     cfg = hub.wiki.cfg
     hub.refresh_judge()
@@ -137,7 +144,8 @@ def _settings(hub: Hub) -> dict:
         **{section: {name: getattr(getattr(cfg, section), name) for name in names}
            for section, names in EDITABLE.items()},
         "users": sorted(cfg.server.users),
-        "keys": {name: bool(os.environ.get(name)) for name in SECRET_NAMES},
+        "providers": PROVIDERS,
+        "keys": _saved_keys(),
         "judge_model": hub.download.status(),
         "active_judge": hub.wiki.agent.verifier.judge_name,
         "docs_dir": str(cfg.docs_dir),
@@ -303,23 +311,27 @@ def _admin_routes(app: FastAPI, hub: Hub) -> None:
     async def detect() -> dict:
         return {"servers": await detect_local_servers()}
 
+    @app.post("/api/admin/models")
+    async def models(body: dict) -> dict:
+        """Modelli offerti dal fornitore indicato nel modulo (non ancora salvato)."""
+        llm_cfg = replace(hub.wiki.cfg.llm, **{
+            key: str(body.get(key, "")).strip() for key in ("provider", "base_url", "api_key_env")})
+        client = make_llm(llm_cfg)
+        try:
+            return {"models": await client.list_models()}
+        finally:
+            await client.aclose()
+
     @app.post("/api/admin/test-model")
     async def test_model() -> dict:
-        wiki = hub.wiki
-        try:
-            text = await wiki.llm.complete(
-                model=wiki.cfg.llm.agent_model, system="Rispondi con una sola parola.",
-                prompt="Scrivi: pronto", kind="test",
-            )
-        except LLMError as exc:
-            return {"ok": False, "error": str(exc)}
-        return {"ok": True, "reply": text[:80]}
+        """Prova il modello salvato e dice che cosa sa fare."""
+        return await hub.wiki.llm.probe(hub.wiki.cfg.llm.agent_model)
 
     @app.post("/api/admin/secret")
     async def secret(body: dict) -> dict:
         save_secret(str(body.get("name", "")), str(body.get("value", "")).strip())
         await hub.replace(hub.wiki.cfg)  # il client del modello va ricreato con la nuova chiave
-        return {"keys": {name: bool(os.environ.get(name)) for name in SECRET_NAMES}}
+        return {"keys": _saved_keys()}
 
     @app.post("/api/admin/model/download")
     async def model_download() -> dict:

@@ -22,7 +22,26 @@ from .store import Store
 from .tools import WikiTools
 from .verify import Citation
 
-SECRET_NAMES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+# Fornitori proposti nelle Impostazioni. Tutti tranne Claude parlano il protocollo di OpenAI,
+# quindi aggiungerne uno significa aggiungere una riga: `key` è il nome con cui si salva la chiave.
+PROVIDERS = (
+    {"id": "locale", "name": "Un modello sul mio computer", "provider": "openai", "base_url": "", "key": ""},
+    {"id": "anthropic", "name": "Claude (Anthropic)", "provider": "anthropic", "base_url": "",
+     "key": "ANTHROPIC_API_KEY"},
+    {"id": "openai", "name": "OpenAI", "provider": "openai", "base_url": "https://api.openai.com/v1",
+     "key": "OPENAI_API_KEY"},
+    {"id": "gemini", "name": "Google Gemini", "provider": "openai",
+     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "key": "GEMINI_API_KEY"},
+    {"id": "openrouter", "name": "OpenRouter (molti modelli, una chiave)", "provider": "openai",
+     "base_url": "https://openrouter.ai/api/v1", "key": "OPENROUTER_API_KEY"},
+    {"id": "mistral", "name": "Mistral", "provider": "openai", "base_url": "https://api.mistral.ai/v1",
+     "key": "MISTRAL_API_KEY"},
+    {"id": "groq", "name": "Groq", "provider": "openai", "base_url": "https://api.groq.com/openai/v1",
+     "key": "GROQ_API_KEY"},
+    {"id": "altro", "name": "Un altro servizio compatibile OpenAI", "provider": "openai", "base_url": "",
+     "key": "LLM_API_KEY"},
+)
+KEY_NAME = re.compile(r"[A-Z][A-Z0-9_]*_API_KEY")
 
 
 class Wiki:
@@ -64,14 +83,14 @@ def load_secrets() -> None:
         stored = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return
-    for name in SECRET_NAMES:
-        if stored.get(name) and not os.environ.get(name):
-            os.environ[name] = stored[name]
+    for name, value in stored.items():
+        if KEY_NAME.fullmatch(name) and value and not os.environ.get(name):
+            os.environ[name] = value
 
 
 def save_secret(name: str, value: str) -> None:
-    if name not in SECRET_NAMES:
-        raise ValueError(f"chiave non prevista: {name!r}")
+    if not KEY_NAME.fullmatch(name):
+        raise ValueError(f"nome di chiave non valido: {name!r}")
     path = apphome.home() / "secrets.json"
     stored = {}
     if path.exists():
