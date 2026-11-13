@@ -1,0 +1,39 @@
+LLMWiki
+=======
+
+Fai domande ai tuoi documenti (contratti, policy, verbali, appunti di studio) e ricevi
+risposte in cui ogni affermazione rimanda alle righe del documento da cui viene. Ogni
+citazione viene controllata: ✓ se il testo citato la sostiene, ⚠ se non la sostiene.
+
+COME SI USA
+1. Fai doppio clic su LLMWiki.exe. Si apre una finestra e compare un'icona vicino all'orologio.
+2. Al primo avvio viene creato lo spazio "Personale" in Documenti\LLMWiki\Personale.
+   Se sul computer è acceso un modello locale (Strata, Ollama, LM Studio...) viene collegato
+   da solo; altrimenti apri Impostazioni e scegli dove gira il modello.
+3. In Impostazioni scarica il decision model (1,1 GB, una volta sola): è il piccolo modello
+   che controlla le citazioni.
+4. Carica i documenti dalla scheda Carica, oppure copiali nella cartella dello spazio
+   (Impostazioni > Apri la cartella dei documenti). L'indicizzazione parte da sola.
+5. Chiedi.
+
+SPAZI
+Uno spazio è una raccolta separata di documenti: uno per lo studio, uno per il lavoro, uno
+per l'azienda. Si creano da Impostazioni e si cambiano dal menu in alto.
+
+CON ALTRE PERSONE
+Impostazioni > Condivisione: crea un utente per ogni collega (riceve un token personale) e
+attiva "Raggiungibile dagli altri computer della rete". I colleghi aprono nel browser
+http://NOME-DEL-TUO-PC:8765 e incollano il token. Lo stesso indirizzo con /mcp in fondo
+collega la wiki a Claude e agli altri programmi che parlano MCP.
+
+DOVE STANNO I DATI
+- Documenti e indice: nella cartella di ogni spazio (si può copiare o spostare intera).
+- Impostazioni dell'app, decision model e log: %LOCALAPPDATA%\LLMWiki
+Per disinstallare basta cancellare questa cartella e quelle due.
+
+CHIUDERE
+Chiudere la finestra non ferma l'app (così l'indicizzazione continua): per chiuderla usa
+l'icona vicino all'orologio > Esci, oppure Impostazioni > Chiudi LLMWiki.
+
+PER CHI VUOLE LA RIGA DI COMANDO
+llmwiki-cli.exe --help   (server senza interfaccia, indicizzazione, MCP su stdio)

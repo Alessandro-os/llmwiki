@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llmwiki</title>
+<style>
+  :root {
+    --bg: #0f0f0e; --panel: #181816; --line: #2c2b27; --text: #ecebe6; --muted: #9b998f;
+    --ok: #5fbf7f; --warn: #e07b53; --accent: #5fbf7f; --chip: #23221f;
+    font-family: system-ui, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .04em; }
+  header .spacer { flex: 1; }
+  .pill { font: 12px ui-monospace, Consolas, monospace; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+  .pill.busy { color: var(--warn); border-color: var(--warn); }
+  .pill.ready { color: var(--ok); border-color: #2f5a3d; }
+  button { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: #0b1a10; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 0; }
+  section { display: flex; flex-direction: column; min-height: 0; }
+  #chat { border-right: 1px solid var(--line); }
+  #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .msg { max-width: 92%; padding: 12px 14px; border-radius: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--chip); }
+  .msg.bot { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .msg.bot.pending { color: var(--muted); font-style: italic; }
+  .msg h1, .msg h2, .msg h3, .doc h1, .doc h2, .doc h3 { font-size: 15px; margin: 12px 0 6px; }
+  .msg p, .doc p { margin: 6px 0; }
+  .msg ul, .doc ul { margin: 6px 0; padding-left: 20px; }
+  code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--chip); padding: 1px 5px; border-radius: 4px; }
+  .cite { font: 11.5px ui-monospace, Consolas, monospace; padding: 0 6px; margin: 0 2px; border-radius: 6px; line-height: 1.6; vertical-align: 1px; }
+  .cite.verified, .cite.rechecked { color: var(--ok); border-color: #2f5a3d; }
+  .cite.warning { color: var(--warn); border-color: var(--warn); }
+  .sources { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  .sources a { color: var(--text); cursor: pointer; text-decoration: underline dotted; }
+  .meta { font: 11.5px ui-monospace, Consolas, monospace; color: var(--muted); margin-top: 8px; }
+  form#ask { display: flex; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); }
+  textarea, input[type=text] { flex: 1; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; resize: none; }
+  nav { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid var(--line); }
+  nav button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 12px; }
+  nav button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tab { flex: 1; overflow-y: auto; padding: 18px 20px; display: none; }
+  .tab.on { display: block; }
+  .crumbs { font: 12.5px ui-monospace, Consolas, monospace; color: var(--muted); margin-bottom: 12px; }
+  .crumbs a { color: var(--text); cursor: pointer; }
+  .doc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; line-height: 1.5; font-size: 14px; }
+  .items { display: grid; gap: 6px; margin-bottom: 14px; }
+  .item { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .item:hover { border-color: var(--muted); }
+  .item .tag { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); min-width: 64px; }
+  .label { font: 11px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
+  pre { font: 12.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); margin: 12px 0; }
+  #drop.over { border-color: var(--accent); color: var(--text); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13.5px; margin-bottom: 12px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .warn { color: var(--warn); } .ok { color: var(--ok); }
+  select, input[type=password], input[type=number] { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  header select { padding: 5px 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; display: grid; gap: 10px; }
+  .card .kv { margin: 0; }
+  .field { display: grid; gap: 4px; font-size: 13.5px; }
+  .field label { color: var(--muted); }
+  .field input, .field select { width: 100%; background: var(--bg); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row input[type=text] { min-width: 180px; background: var(--bg); }
+  .bar { height: 6px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+  .bar div { height: 100%; background: var(--accent); }
+  .hint { border: 1px solid var(--warn); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin: 0 20px 12px; }
+  .hint a { color: var(--warn); cursor: pointer; text-decoration: underline; }
+  .token { font: 12.5px ui-monospace, Consolas, monospace; background: var(--chip); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-auto-rows: minmax(50vh, auto); overflow-y: auto; } #chat { border-right: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>LLMWiki</h1>
+  <select id="space" hidden title="Spazio di lavoro"></select>
+  <span id="status" class="pill">…</span>
+  <span class="spacer"></span>
+  <button id="tokenBtn" hidden>Token</button>
+</header>
+<main>
+  <section id="chat">
+    <div id="log">
+      <div class="msg bot">Chiedi qualcosa sui documenti. Ogni citazione viene verificata: <span class="ok">✓</span> confermata, <span class="warn">⚠</span> non confermata dal testo citato.</div>
+    </div>
+    <form id="ask">
+      <textarea id="question" rows="2" placeholder="Es. Ci sono penali per ritardo nel contratto di fornitura?"></textarea>
+      <button class="primary" id="send">Chiedi</button>
+    </form>
+  </section>
+  <section>
+    <nav>
+      <button data-tab="explore" class="on">Esplora</button>
+      <button data-tab="source">Fonte</button>
+      <button data-tab="upload">Carica</button>
+      <button data-tab="settings" id="settingsTab" hidden>Impostazioni</button>
+    </nav>
+    <div id="hint" class="hint" hidden></div>
+    <div id="explore" class="tab on"></div>
+    <div id="source" class="tab"><p class="meta">Clicca una citazione per vedere il passaggio su cui è stata verificata.</p></div>
+    <div id="upload" class="tab">
+      <div class="label">Cartella di destinazione</div>
+      <input type="text" id="folder" placeholder="es. contratti/2026 (vuoto = radice)" style="width:100%">
+      <div id="drop">Trascina qui i documenti oppure <button id="pick">scegli i file</button><br><small>pdf, docx, md, txt, html, csv… Puoi caricare anche mentre l'indicizzazione è in corso.</small></div>
+      <input type="file" id="files" multiple hidden>
+      <div id="uploadLog" class="meta"></div>
+      <div class="label">Stato dell'indice</div>
+      <div id="statusDetail" class="kv"></div>
+    </div>
+    <div id="settings" class="tab"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let token = "";
+try { token = localStorage.getItem("llmwiki_token") || ""; } catch (e) {}
+
+async function api(path, options = {}) {
+  const headers = Object.assign({}, options.headers);
+  if (token) headers.Authorization = "Bearer " + token;
+  const response = await fetch(path, Object.assign({}, options, { headers }));
+  if (response.status === 401) {
+    askToken("Questo server richiede un token personale.");
+    throw new Error("token mancante o non valido");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || data.detail || ("errore " + response.status));
+  return data;
+}
+
+function askToken(message) {
+  const value = prompt(message + "\nIncolla il tuo token:", token);
+  if (value === null) return;
+  token = value.trim();
+  try { localStorage.setItem("llmwiki_token", token); } catch (e) {}
+  refreshStatus(); explore("");
+}
+$("tokenBtn").onclick = () => askToken("Cambia token.");
+
+// Markdown minimo: il testo è sempre passato da esc() prima di diventare HTML.
+function md(text) {
+  const out = []; let list = false;
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  for (const raw of String(text).split("\n")) {
+    const line = raw.trimEnd();
+    const item = line.match(/^\s*[-*]\s+(.*)$/) || line.match(/^\s*\d+\.\s+(.*)$/);
+    if (item) { if (!list) { out.push("<ul>"); list = true; } out.push("<li>" + inline(item[1]) + "</li>"); continue; }
+    if (list) { out.push("</ul>"); list = false; }
+    const head = line.match(/^(#{1,4})\s+(.*)$/);
+    if (head) out.push("<h3>" + inline(head[2]) + "</h3>");
+    else if (line.startsWith("<!--")) continue;
+    else if (line.trim()) out.push("<p>" + inline(line) + "</p>");
+  }
+  if (list) out.push("</ul>");
+  return out.join("");
+}
+
+const SIGN = { verified: "✓", rechecked: "✓", warning: "⚠" };
+const answers = [];
+
+function renderAnswer(data) {
+  const index = answers.push(data) - 1;
+  const byId = Object.fromEntries(data.citations.map((c) => [c.id, c]));
+  let html = md(data.answer).replace(/\[(\d+)\]/g, (whole, n) => {
+    const c = byId[n];
+    if (!c) return '<span class="cite warning" title="marcatore senza citazione">' + n + " ⚠</span>";
+    return '<button class="cite ' + esc(c.status) + '" data-a="' + index + '" data-c="' + n + '">' + n + " " + (SIGN[c.status] || "") + "</button>";
+  });
+  if (data.citations.length) {
+    html += '<div class="sources">' + data.citations.map((c) =>
+      '<div><span class="' + (c.status === "warning" ? "warn" : "ok") + '">' + (SIGN[c.status] || "·") + "</span> [" + c.id + '] <a data-a="' + index + '" data-c="' + c.id + '">' + esc(c.doc) + "</a> righe " + c.start_line + "–" + c.end_line +
+      (c.status === "warning" ? ' <span class="warn">non confermata</span>' : "") + "</div>").join("") + "</div>";
+  }
+  const warnings = data.warnings ? ' · <span class="warn">' + data.warnings + " citazioni non confermate</span>" : "";
+  html += '<div class="meta">' + data.steps + " passi · " + data.trace.length + " letture" + warnings + (data.complete ? "" : ' · <span class="warn">risposta incompleta</span>') + "</div>";
+  return html;
+}
+
+function showSource(a, n) {
+  const c = answers[a].citations.find((x) => String(x.id) === String(n));
+  if (!c) return;
+  const state = { verified: "confermata dal decision model", rechecked: "confermata al secondo controllo", warning: "non confermata" }[c.status] || c.status;
+  $("source").innerHTML =
+    '<div class="label">Affermazione</div><div class="doc">' + esc(c.claim) + "</div>" +
+    '<div class="kv"><span>Esito</span><span class="' + (c.status === "warning" ? "warn" : "ok") + '">' + (SIGN[c.status] || "") + " " + esc(state) + "</span>" +
+    "<span>Documento</span><span><a class='open' style='cursor:pointer;text-decoration:underline dotted'>" + esc(c.doc) + "</a> · righe " + c.start_line + "–" + c.end_line + "</span>" +
+    (c.confidence === null ? "" : "<span>Confidenza</span><span>" + c.confidence.toFixed(2) + " (" + esc(c.method) + ")</span>") +
+    (c.note ? "<span>Nota</span><span>" + esc(c.note) + "</span>" : "") + "</div>" +
+    '<div class="label">Testo citato</div><pre>' + esc(c.passage || "(non disponibile)") + "</pre>";
+  $("source").querySelector(".open").onclick = () => openText(c.doc, Math.max(1, c.start_line - 15), c.end_line + 15);
+  tab("source");
+}
+
+$("log").addEventListener("click", (event) => {
+  const el = event.target.closest("[data-c]");
+  if (el) showSource(el.dataset.a, el.dataset.c);
+});
+
+$("ask").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const question = $("question").value.trim();
+  if (!question) return;
+  $("question").value = "";
+  const add = (cls, html) => { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("log").append(d); $("log").scrollTop = $("log").scrollHeight; return d; };
+  add("user", esc(question));
+  const pending = add("bot pending", "Sto esplorando la wiki e verificando le citazioni…");
+  $("send").disabled = true;
+  try {
+    const data = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) });
+    pending.className = "msg bot"; pending.innerHTML = renderAnswer(data);
+  } catch (error) {
+    pending.className = "msg bot"; pending.innerHTML = '<span class="warn">Errore: ' + esc(error.message) + "</span>";
+  }
+  $("send").disabled = false; $("log").scrollTop = $("log").scrollHeight;
+});
+$("question").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("ask").requestSubmit(); } });
+
+function tab(name) {
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === name));
+  if (name === "settings") loadSettings();
+}
+
+// ---------------------------------------------------------------- impostazioni (solo dal computer dell'app)
+let settings = null, shownToken = null, pollTimer = null;
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+async function loadSettings() {
+  try { settings = await api("/api/admin/settings"); renderSettings(); }
+  catch (error) { $("settings").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; }
+}
+
+function judgeLine(j) {
+  if (j.status === "ready") return '<span class="ok">installato</span>';
+  if (j.status === "downloading") return "scarico… " + Math.round(100 * j.done / j.total) + "%";
+  if (j.status === "error") return '<span class="warn">errore: ' + esc(j.error) + "</span>";
+  return "non installato";
+}
+
+function renderSettings() {
+  const s = settings, l = s.llm, j = s.judge_model, shared = s.server.host !== "127.0.0.1" && s.server.host !== "localhost";
+  const opt = (value, label, current) => '<option value="' + value + '"' + (value === current ? " selected" : "") + ">" + label + "</option>";
+  const field = (id, label, value, type) => '<div class="field"><label for="' + id + '">' + label + '</label><input type="' + (type || "text") + '" id="' + id + '" value="' + esc(value) + '"></div>';
+  $("settings").innerHTML =
+    '<div class="label">Spazio</div><div class="card"><div class="kv"><span>Documenti</span><span>' + esc(s.docs_dir) + "</span></div>" +
+    '<div class="row"><button data-act="open-folder">Apri la cartella dei documenti</button></div>' +
+    (s.desktop ? '<div class="row"><input type="text" id="newSpace" placeholder="Nuovo spazio, es. Studio"><button data-act="add-space">Crea spazio</button></div><div class="meta">Ogni spazio ha i suoi documenti e il suo indice: uno per lo studio, uno per il lavoro, uno per l\'azienda.</div>' : "") + "</div>" +
+
+    '<div class="label">Modello linguistico</div><div class="card">' +
+    '<div class="field"><label for="provider">Dove gira</label><select id="provider">' + opt("openai", "Sul mio computer (o un server compatibile OpenAI)", l.provider) + opt("anthropic", "Claude di Anthropic (a consumo)", l.provider) + opt("mock", "Demo senza modello", l.provider) + "</select></div>" +
+    '<div data-for="openai">' + field("baseUrl", "Indirizzo del server", l.base_url) + '<div class="row" style="margin-top:8px"><button data-act="detect">Rileva modelli su questo computer</button><span id="detected" class="meta"></span></div></div>' +
+    '<div data-for="anthropic">' + field("apiKey", "Chiave API Anthropic" + (s.keys.ANTHROPIC_API_KEY ? " (già salvata: lascia vuoto per tenerla)" : ""), "", "password") + '<div class="meta">Resta solo su questo computer, fuori dalla cartella dello spazio.</div></div>' +
+    '<div data-for="openai"><div class="field"><label for="reasoning">Quanto ragiona il modello prima di rispondere</label><select id="reasoning">' + opt("default", "Come deciso dal server: più accurato, più lento", l.send_reasoning_effort ? "low" : "default") + opt("low", "Poco: circa il doppio più veloce, schede meno dettagliate", l.send_reasoning_effort ? "low" : "default") + '</select></div><div class="meta">Vale per i modelli locali che "pensano" e accettano reasoning_effort (Strata, Ollama).</div></div>' +
+    '<div data-for="openai anthropic">' + field("agentModel", "Modello per rispondere", l.agent_model) + field("summaryModel", "Modello per schede e riassunti", l.summary_model) + field("judgeModel", "Modello di riserva per la verifica", l.judge_model) + "</div>" +
+    '<div class="row"><button class="primary" data-act="save-llm">Salva</button><button data-act="test">Prova il modello</button><span id="llmMsg" class="meta"></span></div></div>' +
+
+    '<div class="label">Verifica delle citazioni</div><div class="card"><div class="kv"><span>Decision model</span><span>' + judgeLine(j) + "</span><span>In uso ora</span><span>" + (s.active_judge === "nli" ? "decision model dedicato" : "modello linguistico") + "</span></div>" +
+    (j.status === "downloading" ? '<div class="bar"><div style="width:' + (100 * j.done / j.total) + '%"></div></div>' : "") +
+    (j.status === "missing" || j.status === "error" ? '<div class="row"><button data-act="download">Scarica il decision model (1,1 GB)</button><span class="meta">mDeBERTa NLI multilingue, licenza ' + esc(j.license) + ", da Hugging Face</span></div>" : "") +
+    '<div class="field"><label for="judge">Chi giudica le citazioni</label><select id="judge">' + opt("auto", "Automatico: decision model se installato", s.verify.judge) + opt("nli", "Solo decision model", s.verify.judge) + opt("llm", "Solo modello linguistico", s.verify.judge) + "</select></div>" +
+    field("threshold", "Soglia di confidenza (0–1): sotto, la citazione viene ricontrollata", s.verify.threshold, "number") +
+    '<div class="row"><button class="primary" data-act="save-verify">Salva</button><span id="verifyMsg" class="meta"></span></div></div>' +
+
+    '<div class="label">Condivisione con altre persone</div><div class="card">' +
+    '<div class="meta">Ogni persona riceve un token personale. Da questo computer non serve.</div>' +
+    (s.server.users.length ? s.server.users.map((u) => '<div class="row"><span>' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : '<div class="meta">Nessun utente.</div>') +
+    (shownToken ? '<div class="field"><label>Token di ' + esc(shownToken.name) + " (copialo ora: non verrà mostrato di nuovo)</label><div class=\"token\">" + esc(shownToken.token) + "</div></div>" : "") +
+    '<div class="row"><input type="text" id="newUser" placeholder="Nome, es. anna"><button data-act="add-user">Aggiungi utente</button></div>' +
+    '<div class="row"><label><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.server.users.length ? "" : " disabled") + "> Raggiungibile dagli altri computer della rete</label></div>" +
+    '<div class="meta">Indirizzo per i colleghi: http://NOME-DI-QUESTO-PC:' + s.server.port + " · MCP: http://NOME-DI-QUESTO-PC:" + s.server.port + "/mcp · Il cambio di rete vale dal prossimo avvio.</div>" +
+    '<div class="row"><button class="primary" data-act="save-share">Salva</button><span id="shareMsg" class="meta"></span></div></div>' +
+
+    '<div class="label">Indice</div><div class="card">' + field("concurrency", "Richieste al modello in parallelo", s.index.concurrency, "number") +
+    '<div class="row"><button class="primary" data-act="save-index">Salva</button><button data-act="retry">Riprova i documenti in errore</button><span id="indexMsg" class="meta"></span></div><div id="errorList" class="meta"></div></div>' +
+    (s.desktop ? '<div class="row"><button data-act="quit">Chiudi LLMWiki</button><span class="meta">Chiudere la finestra non ferma l\'app: resta l\'icona vicino all\'orologio, così l\'indicizzazione continua.</span></div>' : "") +
+    '<div class="meta" style="margin-top:10px">LLMWiki ' + esc(s.version) + (s.config_file ? " · impostazioni: " + esc(s.config_file) : "") + "</div>";
+  $("threshold").step = "0.05"; $("threshold").min = "0.05"; $("threshold").max = "0.95";
+  showProvider();
+  api("/api/admin/errors").then((d) => { if (d.errors.length) $("errorList").innerHTML = d.errors.map((e) => '<div class="warn">' + esc(e.doc) + ": " + esc(e.error) + "</div>").join(""); }).catch(() => {});
+  clearTimeout(pollTimer);
+  if (j.status === "downloading") pollTimer = setTimeout(loadSettings, 1500);
+}
+
+function showProvider() {
+  const provider = $("provider").value;
+  $("settings").querySelectorAll("[data-for]").forEach((el) => { el.hidden = !el.dataset.for.split(" ").includes(provider); });
+}
+
+$("settings").addEventListener("change", (event) => { if (event.target.id === "provider") showProvider(); });
+$("settings").addEventListener("click", async (event) => {
+  const act = event.target.dataset.act;
+  if (!act) return;
+  const say = (id, text, bad) => { const el = $(id); if (el) el.innerHTML = '<span class="' + (bad ? "warn" : "ok") + '">' + esc(text) + "</span>"; };
+  const guard = async (id, work) => { try { await work(); } catch (error) { say(id, error.message, true); } };
+  if (act === "open-folder") guard("llmMsg", () => post("/api/admin/open-folder"));
+  if (act === "quit" && confirm("Chiudere LLMWiki? L'indicizzazione in corso si ferma e riprende al prossimo avvio.")) { await post("/api/admin/quit").catch(() => {}); document.body.innerHTML = '<p style="padding:40px">LLMWiki è stato chiuso. Puoi chiudere questa finestra.</p>'; }
+  if (act === "add-space") guard("llmMsg", async () => { await post("/api/admin/spaces", { name: $("newSpace").value }); await afterSwitch(); });
+  if (act === "detect") guard("detected", async () => {
+    say("detected", "cerco…");
+    const found = (await api("/api/admin/detect")).servers;
+    if (!found.length) return say("detected", "nessun server di modelli acceso su questo computer", true);
+    $("detected").innerHTML = found.map((f, i) => '<a data-act="use" data-i="' + i + '" style="cursor:pointer;text-decoration:underline">' + esc(f.name) + ": " + esc(f.models[0]) + "</a>").join(" · ");
+    $("detected").found = found;
+  });
+  if (act === "use") { const f = $("detected").found[event.target.dataset.i]; $("baseUrl").value = f.base_url; for (const id of ["agentModel", "summaryModel", "judgeModel"]) $(id).value = f.models[0]; }
+  if (act === "save-llm") guard("llmMsg", async () => {
+    const provider = $("provider").value, llm = { provider };
+    if (provider !== "mock") Object.assign(llm, { agent_model: $("agentModel").value, summary_model: $("summaryModel").value, judge_model: $("judgeModel").value });
+    if (provider === "openai") { const quick = $("reasoning").value === "low"; Object.assign(llm, { base_url: $("baseUrl").value, send_reasoning_effort: quick, agent_effort: quick ? "low" : "high", summary_effort: quick ? "low" : "medium" }); }
+    if (provider === "anthropic" && $("apiKey").value) await post("/api/admin/secret", { name: "ANTHROPIC_API_KEY", value: $("apiKey").value });
+    settings = await post("/api/admin/settings", { llm }); renderSettings(); say("llmMsg", "salvato"); refreshStatus();
+  });
+  if (act === "test") guard("llmMsg", async () => { say("llmMsg", "provo…"); const r = await post("/api/admin/test-model"); say("llmMsg", r.ok ? "il modello risponde: " + r.reply : r.error, !r.ok); });
+  if (act === "download") guard("verifyMsg", async () => { await post("/api/admin/model/download"); loadSettings(); });
+  if (act === "save-verify") guard("verifyMsg", async () => { settings = await post("/api/admin/settings", { verify: { judge: $("judge").value, threshold: $("threshold").value } }); renderSettings(); say("verifyMsg", "salvato"); });
+  if (act === "add-user") guard("shareMsg", async () => { shownToken = await post("/api/admin/users", { name: $("newUser").value }); await loadSettings(); });
+  if (act === "del-user") guard("shareMsg", async () => { await api("/api/admin/users/" + encodeURIComponent(event.target.dataset.name), { method: "DELETE" }); shownToken = null; await loadSettings(); });
+  if (act === "save-share") guard("shareMsg", async () => { settings = await post("/api/admin/settings", { server: { host: $("shared").checked ? "0.0.0.0" : "127.0.0.1" } }); renderSettings(); say("shareMsg", "salvato: vale dal prossimo avvio"); });
+  if (act === "save-index") guard("indexMsg", async () => { settings = await post("/api/admin/settings", { index: { concurrency: $("concurrency").value } }); renderSettings(); say("indexMsg", "salvato"); });
+  if (act === "retry") guard("indexMsg", async () => { await post("/api/admin/retry-errors"); say("indexMsg", "rimessi in coda"); refreshStatus(); });
+});
+
+async function afterSwitch() {
+  $("log").innerHTML = ""; answers.length = 0;
+  await refreshStatus(); explore("");
+  if ($("settings").classList.contains("on")) loadSettings();
+}
+$("space").addEventListener("change", async () => {
+  try { await post("/api/admin/spaces/switch", { id: $("space").value }); await afterSwitch(); }
+  catch (error) { alert(error.message); }
+});
+$("hint").addEventListener("click", (event) => { if (event.target.dataset.go) tab(event.target.dataset.go); });
+document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
+
+function crumbs(folder) {
+  const parts = folder ? folder.split("/") : [];
+  let html = '<a data-folder="">wiki</a>';
+  parts.forEach((part, i) => { html += ' / <a data-folder="' + esc(parts.slice(0, i + 1).join("/")) + '">' + esc(part) + "</a>"; });
+  return '<div class="crumbs">' + html + "</div>";
+}
+
+async function explore(folder) {
+  const box = $("explore");
+  try {
+    const data = await api("/api/folder?path=" + encodeURIComponent(folder));
+    let html = crumbs(folder) + '<div class="label">Mappa della cartella</div><div class="doc">' + md(data.map) + "</div>";
+    if (data.indexing) html += '<p class="meta warn">' + esc(data.indexing) + "</p>";
+    const rows = [];
+    for (const s of data.subfolders) rows.push('<div class="item" data-folder="' + esc(s) + '"><span class="tag">cartella</span>' + esc(s.split("/").pop()) + "</div>");
+    for (const s of data.syntheses || []) rows.push('<div class="item" data-node="' + esc(s) + '"><span class="tag">sintesi</span>' + esc(s.split("::").pop()) + "</div>");
+    for (const d of data.documents) rows.push('<div class="item" data-doc="' + esc(d.doc) + '"><span class="tag">documento</span><span>' + esc(d.title || d.doc) + ' <span class="meta">' + esc(d.doc) + "</span></span></div>");
+    html += '<div class="items">' + rows.join("") + "</div>" + (data.note ? '<p class="meta">' + esc(data.note) + "</p>" : "");
+    box.innerHTML = html; box.dataset.folder = folder;
+  } catch (error) { box.innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; }
+}
+
+async function openNode(id) {
+  const data = await api("/api/node?id=" + encodeURIComponent(id));
+  const folder = id.split("::")[0];
+  const rows = data.children.map((c) => c.kind === "doc"
+    ? '<div class="item" data-doc="' + esc(c.ref) + '"><span class="tag">documento</span>' + esc(c.title || c.ref) + "</div>"
+    : c.kind === "map"
+    ? '<div class="item" data-folder="' + esc(c.ref.split("::")[0]) + '"><span class="tag">cartella</span>' + esc(c.ref.split("::")[0]) + "</div>"
+    : '<div class="item" data-node="' + esc(c.ref) + '"><span class="tag">sintesi</span>' + esc(c.ref) + "</div>");
+  $("explore").innerHTML = crumbs(folder) + '<div class="label">Sintesi ' + esc(id) + '</div><div class="doc">' + md(data.text) + '</div><div class="items">' + rows.join("") + "</div>";
+}
+
+async function openDoc(doc) {
+  const data = await api("/api/summary?doc=" + encodeURIComponent(doc));
+  const folder = doc.includes("/") ? doc.slice(0, doc.lastIndexOf("/")) : "";
+  $("explore").innerHTML = crumbs(folder) + '<div class="label">Scheda di ' + esc(doc) + '</div><div class="doc">' + md(data.text) + '</div><button id="fullText">Apri il testo originale</button>';
+  $("fullText").onclick = () => openText(doc, 1, 0);
+}
+
+async function openText(doc, start, end) {
+  const data = await api("/api/document?doc=" + encodeURIComponent(doc) + "&start=" + start + "&end=" + end);
+  const folder = doc.includes("/") ? doc.slice(0, doc.lastIndexOf("/")) : "";
+  $("explore").innerHTML = crumbs(folder) + '<div class="label">Testo originale</div><pre>' + esc(data.text) + "</pre>";
+  tab("explore");
+}
+
+$("explore").addEventListener("click", (event) => {
+  const el = event.target.closest("[data-folder],[data-node],[data-doc]");
+  if (!el) return;
+  const fail = (error) => { $("explore").innerHTML = '<p class="warn">' + esc(error.message) + "</p>"; };
+  if (el.dataset.folder !== undefined) explore(el.dataset.folder);
+  else if (el.dataset.node) openNode(el.dataset.node).catch(fail);
+  else if (el.dataset.doc) openDoc(el.dataset.doc).catch(fail);
+});
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+  const body = new FormData();
+  for (const file of files) body.append("files", file);
+  body.append("folder", $("folder").value.trim());
+  $("uploadLog").textContent = "Carico " + files.length + " file…";
+  try {
+    const data = await api("/api/upload", { method: "POST", body });
+    $("uploadLog").innerHTML = "Caricati: " + data.saved.length + (data.rejected.length ? ' · <span class="warn">scartati: ' + data.rejected.map((r) => esc(r.file)).join(", ") + "</span>" : "") + ". L'indicizzazione parte da sola.";
+    refreshStatus();
+  } catch (error) { $("uploadLog").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; }
+}
+$("pick").onclick = () => $("files").click();
+$("files").onchange = () => { uploadFiles([...$("files").files]); $("files").value = ""; };
+const drop = $("drop");
+drop.ondragover = (event) => { event.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (event) => { event.preventDefault(); drop.classList.remove("over"); uploadFiles([...event.dataTransfer.files]); };
+
+let wasBusy = false;
+async function refreshStatus() {
+  try {
+    const s = await api("/api/status");
+    $("tokenBtn").hidden = s.local || !s.auth;
+    $("settingsTab").hidden = !s.local;
+    if (s.spaces && s.local) {
+      const sel = $("space"), wanted = s.spaces.map((x) => x.id + "\u0000" + x.name).join("\u0001");
+      if (sel.dataset.sig !== wanted) { sel.innerHTML = s.spaces.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.name) + "</option>").join(""); sel.dataset.sig = wanted; }
+      if (document.activeElement !== sel) sel.value = s.space;
+      sel.hidden = false;
+    }
+    const hint = $("hint");
+    if (s.local && s.provider === "mock") { hint.hidden = false; hint.innerHTML = 'Modalità demo: le risposte sono finte. <a data-go="settings">Collega un modello</a> per usarla davvero.'; }
+    else if (s.total === 0) { hint.hidden = false; hint.innerHTML = 'Questo spazio è vuoto: <a data-go="upload">carica dei documenti</a> o copiali nella cartella dello spazio.'; }
+    else hint.hidden = true;
+    const queue = s.pending + s.indexing;
+    $("status").className = "pill " + (s.busy ? "busy" : "ready");
+    $("status").textContent = s.busy ? "indicizzo… " + s.ready + "/" + s.total + " documenti" : s.ready + " documenti pronti";
+    $("statusDetail").innerHTML = "<span>Pronti</span><span>" + s.ready + "</span><span>In coda</span><span>" + queue + "</span><span>Errori</span><span class='" + (s.error ? "warn" : "") + "'>" + s.error + "</span><span>Nodi dell'albero</span><span>" + s.nodes + "</span><span>Modello</span><span>" + esc(s.provider) + "</span>" + (s.last_error ? "<span>Ultimo errore</span><span class='warn'>" + esc(s.last_error) + "</span>" : "");
+    if (wasBusy && !s.busy && $("explore").dataset.folder !== undefined) explore($("explore").dataset.folder);
+    wasBusy = s.busy;
+  } catch (error) { $("status").className = "pill busy"; $("status").textContent = error.message; }
+}
+refreshStatus(); setInterval(refreshStatus, 3000); explore("");
+</script>
+</body>
+</html>

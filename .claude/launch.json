@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "llmwiki-demo",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "llmwiki", "-c", "examples/wiki.demo.toml", "serve"],
+      "port": 8765
+    }
+  ]
+}

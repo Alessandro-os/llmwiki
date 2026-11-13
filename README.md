@@ -1,0 +1,141 @@
+# LLMWiki
+
+Fai domande ai tuoi documenti e ricevi risposte in cui ogni affermazione rimanda alle righe
+del documento da cui viene, con la citazione **controllata**: ✓ se il testo la sostiene, ⚠ se
+no. Funziona con un modello locale (Strata, Ollama, LM Studio, llama.cpp, vLLM) o con Claude.
+
+Serve a due usi con la stessa app:
+
+- **personale**: una cartella di appunti in markdown su cui studiare, facendo domande a cui
+  l'app risponde solo con ciò che c'è scritto negli appunti;
+- **aziendale**: contratti, policy, verbali in una wiki unica, compilata una volta, a cui i
+  colleghi si collegano da browser o da MCP con un token personale.
+
+## Per chi la usa
+
+Scarica `LLMWiki-<versione>-windows-x64.zip`, estrailo dove vuoi e apri `LLMWiki.exe`. Le
+istruzioni complete sono in `LEGGIMI.txt` dentro la cartella. In breve: al primo avvio l'app
+crea lo spazio *Personale*, collega da sola il modello locale se ne trova uno acceso, e da
+*Impostazioni* si scarica il decision model, si creano altri spazi (Studio, Lavoro, Azienda) e
+si invitano altre persone.
+
+## Come funziona
+
+| Problema delle LLM wiki classiche | Cosa fa LLMWiki |
+|---|---|
+| Un agente indicizza un documento alla volta | Ogni documento riceve la sua scheda in modo indipendente, in parallelo; se ne possono aggiungere altri mentre l'indicizzazione è in corso |
+| Le fonti sono citate ma non verificate | Ogni citazione è (affermazione, documento, righe) e passa da una verifica a cascata |
+| Ogni utente deve compilarsi la sua wiki | Un solo computer compila la wiki; gli altri si collegano |
+| Oltre qualche centinaio di documenti il grafo si inceppa | Nessun grafo da tenere coerente: schede → sintesi di gruppo → mappa della cartella. Un documento nuovo rigenera un solo ramo |
+
+**Indicizzazione.** Il testo di ogni documento viene estratto a righe numerate. Un modello
+scrive la *scheda* del documento (sintesi, punti chiave con le righe, riferimenti). Le schede
+di una cartella vengono riassunte a gruppi, poi i riassunti, fino alla *mappa della cartella*.
+Ogni nodo ricorda l'hash dei suoi figli e viene riscritto solo se sono cambiati.
+
+**Domande.** Non c'è un grafo precompilato: l'agente parte dalla mappa, scende nelle sintesi e
+nelle schede, cerca per parole chiave, legge le righe originali e segue i rimandi tra documenti
+(`[[link]]` compresi). Per le domande ampie lancia esploratori in parallelo.
+
+**Verifica delle citazioni** (`src/llmwiki/verify.py`):
+
+1. *decision model* dedicato: un modello NLI multilingue che gira sulla CPU in 100–200 ms e
+   dice con che probabilità il testo citato implica l'affermazione;
+2. sui casi sotto soglia, un sì/no del modello linguistico (con i logprob, se il server li
+   espone);
+3. se ancora non basta, il modello rilegge il passaggio con più contesto e, se trova il fatto
+   poco più in là, corregge le righe;
+4. se fallisce anche questo, la citazione resta con ⚠.
+
+Il decision model è `mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` (MIT). È stato scelto
+confrontandolo su citazioni italiane giuste e sbagliate: non ne ha accettata nessuna sbagliata.
+Da solo respinge una parte delle citazioni corrette più lunghe, ed è per questo che è il primo
+filtro di una cascata e non l'unico giudice.
+
+## Dove stanno i dati
+
+```
+<spazio>/wiki.toml                 impostazioni dello spazio
+<spazio>/documenti/...             documenti originali
+<spazio>/.indice/text/...          testo estratto, a righe numerate (ciò che si cita)
+<spazio>/.indice/summaries/...     schede
+<spazio>/.indice/tree/...          sintesi di gruppo e mappe delle cartelle
+<spazio>/.indice/state.db          stato, albero, indice full-text (SQLite FTS5)
+
+%LOCALAPPDATA%\LLMWiki\app.json    spazi conosciuti, spazio attivo, porta
+%LOCALAPPDATA%\LLMWiki\models\     decision model
+%LOCALAPPDATA%\LLMWiki\secrets.json  chiavi API (mai dentro gli spazi)
+%LOCALAPPDATA%\LLMWiki\logs\       log
+```
+
+Uno spazio è una cartella autonoma: si copia, si sposta, si mette in backup così com'è.
+
+## Accessi
+
+- Dal computer su cui gira l'app non serve nessun token e si può amministrare
+  (`/api/admin/...`: modelli, spazi, utenti).
+- Dagli altri computer serve un token personale e l'amministrazione è chiusa.
+- L'app non si espone in rete finché non esiste almeno un utente.
+- Il server parla HTTP semplice: su reti non fidate va messo dietro HTTPS o una VPN. Se davanti
+  c'è un reverse proxy sulla stessa macchina, impostare `trust_loopback = false` in `[server]`.
+
+## MCP
+
+`http://HOST:8765/mcp` (Streamable HTTP) espone `wiki_list_folder`, `wiki_read_node`,
+`wiki_read_summary`, `wiki_read_document`, `wiki_search`, `wiki_find_documents`,
+`wiki_verify_citation`, `wiki_ask`, `wiki_status`. Un modello collegato può navigare la wiki
+da solo e far verificare le proprie citazioni, oppure chiamare `wiki_ask` e ricevere la
+risposta già verificata.
+
+```bash
+claude mcp add --transport http llmwiki http://HOST:8765/mcp --header "Authorization: Bearer TOKEN"
+```
+
+## Per chi sviluppa
+
+```bash
+uv sync
+```
+
+```bash
+uv run pytest
+```
+
+```bash
+uv run llmwiki app
+```
+
+Server senza interfaccia desktop, su una cartella con il suo `wiki.toml`:
+
+```bash
+uv run llmwiki init
+```
+
+```bash
+uv run llmwiki serve
+```
+
+Altri comandi: `index`, `ask "domanda"`, `status`, `user add <nome>`, `mcp` (stdio),
+`model install`. Demo senza modello: `uv run llmwiki -c examples/wiki.demo.toml serve`.
+
+Pacchetto distribuibile (cartella `dist/LLMWiki` e zip):
+
+```bash
+powershell -ExecutionPolicy Bypass -File packaging\build.ps1
+```
+
+Codice in `src/llmwiki/`:
+
+| File | Cosa contiene |
+|---|---|
+| `indexer.py` | schede in parallelo e albero di riassunti incrementale |
+| `tools.py` | strumenti di navigazione (usati da agente, API e MCP) |
+| `agent.py` | agente che risponde con citazioni, esploratori in parallelo |
+| `verify.py`, `nli.py` | verifica a cascata e decision model |
+| `llm.py` | backend: Claude, OpenAI-compatibile, mock |
+| `server.py`, `mcp_server.py` | API, interfaccia web, MCP |
+| `app.py`, `apphome.py` | spazi, cartella dell'app, cambio di impostazioni a caldo |
+| `desktop.py` | app desktop (finestra, icona, primo avvio) |
+
+I test usano il provider `mock` e finti endpoint HTTP: non servono credenziali né modelli.
+`LICENSES.md` elenca i componenti di terze parti.

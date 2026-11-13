@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+data/
+wiki.toml
+examples/.demo-wiki/
+packaging/llmwiki.ico
+file personale per i comandi da terminale.txt

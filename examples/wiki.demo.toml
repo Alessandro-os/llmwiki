@@ -1,0 +1,20 @@
+# Demo senza modello: provider "mock", nessun token speso.
+#   uv run llmwiki -c examples/wiki.demo.toml serve
+# I "riassunti" del mock sono solo le prime righe dei documenti: serve a vedere come
+# funzionano indicizzazione, navigazione, citazioni e server, non la qualità delle risposte.
+
+[paths]
+docs = "docs"
+wiki = ".demo-wiki"
+
+[llm]
+provider = "mock"
+
+[index]
+fanout = 4
+
+[server]
+host = "127.0.0.1"
+port = 8765
+
+[server.users]
