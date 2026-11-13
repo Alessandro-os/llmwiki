@@ -35,8 +35,12 @@ decisione; quelle in basso sono sviluppi possibili.
 ## Sviluppi possibili
 
 - [ ] Ricerca per significato oltre che per parole (embedding): richiede di scaricare un
-  secondo modello; da fare solo se il banco di prova mostra domande che la ricerca per parole
-  non trova.
+  secondo modello. Per ora non serve: nella raccolta difficile (64 documenti molto simili) la
+  ricerca per parole più la navigazione ha trovato il documento giusto 24 volte su 24. Da
+  riconsiderare con raccolte di migliaia di documenti.
+- [ ] Velocità con i modelli locali: oggi un documento richiede 25-45 secondi e una risposta
+  circa due minuti, perché Strata elabora una richiesta alla volta. Si può provare un modello
+  più piccolo per le schede, tenendo quello attuale per le risposte.
 - [ ] Modalità "interrogami": l'app genera domande dagli appunti di una cartella e controlla
   le tue risposte sui testi.
 - [ ] OCR per i PDF scansionati (oggi vengono segnalati come non leggibili).

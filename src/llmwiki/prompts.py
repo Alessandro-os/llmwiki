@@ -119,7 +119,9 @@ qualcosa che lì non c'è, dillo esplicitamente e tienilo separato dalle afferma
 rimanda a una citazione: documento, intervallo di righe stretto (le righe che contengono \
 proprio quel fatto) e `claim`, cioè l'affermazione riscritta in modo autosufficiente. Ogni \
 citazione viene poi verificata automaticamente confrontando `claim` con quelle righe, quindi \
-un intervallo sbagliato o troppo largo la fa fallire.
+un intervallo sbagliato o troppo largo la fa fallire. Un confronto tra due documenti ("il \
+fatturato 2026 è più alto del 2025") si cita con due citazioni, una per documento, ciascuna \
+con il solo fatto che quel documento contiene.
 - Se i documenti non contengono la risposta, dillo invece di supporre. Se affermi che un \
 documento *non* contiene qualcosa, cita l'intero documento o l'intera sezione che hai letto: \
 un'assenza si verifica solo su tutto il testo in cui la cosa dovrebbe trovarsi.

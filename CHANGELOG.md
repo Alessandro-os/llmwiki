@@ -1,5 +1,29 @@
 # Cronologia delle versioni
 
+## 0.3.1 · 2026-11-14
+
+Per chi la usa:
+
+- Spostare o rinominare un file non costa più una nuova lettura da parte del modello: testo e
+  scheda lo seguono.
+- Un documento modificato mentre il modello lo stava leggendo viene riletto, invece di restare
+  con la scheda della versione vecchia.
+- Le affermazioni di assenza ("l'allegato non prevede penali") vengono confermate quando le
+  righe citate coprono tutto il documento, invece di finire con ⚠.
+- Se la cartella dello spazio attivo è stata spostata o cancellata, l'app apre un altro spazio.
+- Avviso in alto quando alcuni documenti non sono stati indicizzati.
+- Installer `LLMWiki-<versione>-setup.exe`.
+
+Per chi sviluppa:
+
+- Revisione del codice: server, app desktop e verifica divisi in funzioni piccole; una sola
+  fonte per la configurazione (`Config.save()`), creazione utenti e rilevamento dei modelli
+  locali condivisi tra app e riga di comando.
+- Un server di modelli spento non viene più scambiato per un server senza logprob.
+- `evals/run.py answers --suite difficile`: 64 documenti molto simili tra loro e 24 domande
+  con risposta nota.
+- Controlli automatici pronti per GitHub (`.github/workflows/ci.yml`), fine riga uniformi.
+
 ## 0.3.0 · 2026-11-14
 
 Per chi la usa:

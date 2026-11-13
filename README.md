@@ -66,6 +66,7 @@ esempio: indicano che il meccanismo funziona, non sono un benchmark.
 | Cosa | Risultato |
 |---|---|
 | Risposte corrette, ragionamento predefinito | 9 su 9 · 41 citazioni, nessuna non confermata · 111 s di media |
+| Raccolta difficile: 64 documenti, di cui 16 contratti quasi identici | 23 risposte corrette su 24 · 102 citazioni, 1 non confermata (a ragione: un confronto tra due documenti citato su uno solo) · 110 s di media · indice in 47 minuti |
 | Risposte corrette, ragionamento ridotto | 9 su 9 · 18 citazioni, nessuna non confermata · 68 s di media |
 | Decision model su 32 citazioni italiane | 0 sbagliate accettate, 0 giuste respinte · circa 160 ms l'una sulla CPU |
 | Giudice del modello linguistico (logprob) sugli stessi casi | 0 sbagliate accettate, 1 giusta respinta · circa 2,3 s l'una |
@@ -151,6 +152,9 @@ uv run python evals/run.py answers --config percorso/wiki.toml
 ```bash
 uv run python evals/run.py scale --docs 5000
 ```
+
+Con `answers --suite difficile` le domande girano su 64 documenti generati apposta per
+confondere (sedici contratti con la stessa struttura e numeri diversi), con risposte note.
 
 Pacchetto distribuibile: cartella `dist/LLMWiki`, zip e, se Inno Setup è installato
 (`winget install JRSoftware.InnoSetup`), `LLMWiki-<versione>-setup.exe`. La build collauda
