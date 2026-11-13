@@ -213,11 +213,25 @@ def _main(argv: list[str] | None = None) -> int:
 
     if not registry.spaces:
         _first_run(registry)
-    space = registry.active()
-    try:
-        hub = Hub(Wiki(Config.load(Path(space["path"]) / "wiki.toml")), registry)
-    except Exception as exc:
-        raise RuntimeError(f"lo spazio «{space['name']}» ({space['path']}) non si apre: {exc}") from exc
+    # Si apre lo spazio attivo; se la sua cartella è stata spostata o cancellata si ripiega
+    # sul primo spazio che si apre, invece di lasciare l'utente senza applicazione.
+    active = registry.active()
+    hub, problems = None, []
+    for space in [active, *(s for s in registry.spaces if s is not active)]:
+        config_file = Path(space["path"]) / "wiki.toml"
+        try:
+            if not config_file.is_file():
+                raise FileNotFoundError(f"manca {config_file}")
+            hub = Hub(Wiki(Config.load(config_file)), registry)
+        except Exception as exc:
+            log.warning("spazio %s non apribile: %s", space["path"], exc)
+            problems.append(f"«{space['name']}» ({space['path']}): {exc}")
+            continue
+        if space is not active:
+            registry.set_active(space["id"])
+        break
+    if hub is None:
+        raise RuntimeError("nessuno spazio si apre:\n" + "\n".join(problems))
     cfg = hub.wiki.cfg
     port = _free_port(port)
     if not args.port and registry.data.get("port") != port:

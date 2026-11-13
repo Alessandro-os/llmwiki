@@ -505,6 +505,7 @@ async function refreshStatus() {
     const hint = $("hint");
     if (s.local && s.provider === "mock") { hint.hidden = false; hint.innerHTML = 'Modalità demo: le risposte sono finte. <a data-go="settings">Collega un modello</a> per usarla davvero.'; }
     else if (s.total === 0) { hint.hidden = false; hint.innerHTML = 'Questo spazio è vuoto: <a data-go="upload">carica dei documenti</a> o copiali nella cartella dello spazio.'; }
+    else if (s.error && s.local) { hint.hidden = false; hint.innerHTML = s.error + (s.error === 1 ? " documento non è stato indicizzato" : " documenti non sono stati indicizzati") + ' (modello non raggiungibile o file illeggibile): <a data-go="settings">apri Impostazioni</a> per vedere il motivo e riprovare.'; }
     else hint.hidden = true;
     const queue = s.pending + s.indexing;
     $("status").className = "pill " + (s.busy ? "busy" : "ready");
