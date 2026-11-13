@@ -74,6 +74,9 @@
   .bar div { height: 100%; background: var(--accent); }
   .hint { border: 1px solid var(--warn); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin: 0 20px 12px; }
   .hint a { color: var(--warn); cursor: pointer; text-decoration: underline; }
+  .steps { font: 12px ui-monospace, Consolas, monospace; font-style: normal; margin-top: 6px; display: grid; gap: 2px; }
+  .steps div:last-child { color: var(--text); }
+  pre .ln { display: block; } pre .ln.hi { background: rgba(95, 191, 127, .18); box-shadow: -3px 0 0 var(--ok); }
   .token { font: 12.5px ui-monospace, Consolas, monospace; background: var(--chip); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
   @media (max-width: 860px) { main { grid-template-columns: 1fr; grid-auto-rows: minmax(50vh, auto); overflow-y: auto; } #chat { border-right: none; } }
 </style>
@@ -84,6 +87,7 @@
   <select id="space" hidden title="Spazio di lavoro"></select>
   <span id="status" class="pill">…</span>
   <span class="spacer"></span>
+  <button id="newChat" title="Svuota la conversazione di questo spazio">Nuova conversazione</button>
   <button id="tokenBtn" hidden>Token</button>
 </header>
 <main>
@@ -166,6 +170,23 @@ function md(text) {
 
 const SIGN = { verified: "✓", rechecked: "✓", warning: "⚠" };
 const answers = [];
+const chat = [];   // scambi di questa conversazione: servono alle domande di approfondimento
+let running = null; // AbortController della domanda in corso
+function addMsg(cls, html) { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("log").append(d); $("log").scrollTop = $("log").scrollHeight; return d; }
+const short = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
+function describe(e) {
+  const a = e.args || {}, who = e.explorer ? "esploratore: " : "";
+  switch (e.tool) {
+    case "list_folder": return who + "apro la cartella " + (a.path || "principale");
+    case "read_node": return who + "leggo la sintesi " + short(a.node_id, 60);
+    case "read_summary": return who + "leggo la scheda di " + short(a.doc, 70);
+    case "read_document": return who + "leggo " + short(a.doc, 60) + (a.start_line ? ", righe " + a.start_line + (a.end_line ? "–" + a.end_line : " e seguenti") : "");
+    case "search": return who + "cerco «" + short(a.query, 70) + "»";
+    case "find_documents": return who + "cerco il documento «" + short(a.name, 60) + "»";
+    case "delegate": return "lancio " + ((a.tasks || []).length || "alcuni") + " esploratori in parallelo";
+    default: return who + e.tool;
+  }
+}
 
 function renderAnswer(data) {
   const index = answers.push(data) - 1;
@@ -196,7 +217,7 @@ function showSource(a, n) {
     (c.confidence === null ? "" : "<span>Confidenza</span><span>" + c.confidence.toFixed(2) + " (" + esc(c.method) + ")</span>") +
     (c.note ? "<span>Nota</span><span>" + esc(c.note) + "</span>" : "") + "</div>" +
     '<div class="label">Testo citato</div><pre>' + esc(c.passage || "(non disponibile)") + "</pre>";
-  $("source").querySelector(".open").onclick = () => openText(c.doc, Math.max(1, c.start_line - 15), c.end_line + 15);
+  $("source").querySelector(".open").onclick = () => openText(c.doc, Math.max(1, c.start_line - 25), c.end_line + 25, c.start_line, c.end_line);
   tab("source");
 }
 
@@ -207,22 +228,68 @@ $("log").addEventListener("click", (event) => {
 
 $("ask").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (running) { running.abort(); return; }  // il pulsante, mentre risponde, è "Ferma"
   const question = $("question").value.trim();
   if (!question) return;
   $("question").value = "";
-  const add = (cls, html) => { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("log").append(d); $("log").scrollTop = $("log").scrollHeight; return d; };
-  add("user", esc(question));
-  const pending = add("bot pending", "Sto esplorando la wiki e verificando le citazioni…");
-  $("send").disabled = true;
+  addMsg("user", esc(question));
+  const pending = addMsg("bot pending", '<div>Sto esplorando la wiki…</div><div class="steps"></div>');
+  const head = pending.firstChild, steps = pending.querySelector(".steps");
+  const controller = (running = new AbortController());
+  $("send").textContent = "Ferma"; $("send").classList.remove("primary");
+  const started = Date.now();
   try {
-    const data = await api("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) });
-    pending.className = "msg bot"; pending.innerHTML = renderAnswer(data);
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = "Bearer " + token;
+    const response = await fetch("/api/ask/stream", { method: "POST", headers, signal: controller.signal, body: JSON.stringify({ question, history: chat.slice(-3) }) });
+    if (response.status === 401) { askToken("Questo server richiede un token personale."); throw new Error("token mancante o non valido"); }
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "errore " + response.status);
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = "", done = false, count = 0;
+    while (!done) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1);
+        if (!line.trim()) continue;
+        const e = JSON.parse(line);
+        if (e.type === "step") {
+          count++;
+          const row = document.createElement("div"); row.textContent = describe(e); steps.append(row);
+          while (steps.children.length > 6) steps.firstChild.remove();
+          head.textContent = "Sto esplorando la wiki… " + count + " letture, " + Math.round((Date.now() - started) / 1000) + " s";
+        } else if (e.type === "verifying") head.textContent = "Verifico " + e.count + " citazioni…";
+        else if (e.type === "error") throw new Error(e.error);
+        else if (e.type === "answer") { pending.className = "msg bot"; pending.innerHTML = renderAnswer(e.answer); chat.push({ question, answer: e.answer.answer }); done = true; }
+        $("log").scrollTop = $("log").scrollHeight;
+      }
+    }
+    if (!done) throw new Error("la risposta si è interrotta");
   } catch (error) {
-    pending.className = "msg bot"; pending.innerHTML = '<span class="warn">Errore: ' + esc(error.message) + "</span>";
+    pending.className = "msg bot";
+    pending.innerHTML = error.name === "AbortError" ? '<span class="meta">Domanda fermata.</span>' : '<span class="warn">Errore: ' + esc(error.message) + "</span>";
   }
-  $("send").disabled = false; $("log").scrollTop = $("log").scrollHeight;
+  running = null; $("send").textContent = "Chiedi"; $("send").classList.add("primary");
+  $("log").scrollTop = $("log").scrollHeight;
 });
-$("question").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("ask").requestSubmit(); } });
+$("question").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!running) $("ask").requestSubmit(); } });
+
+async function loadHistory() {
+  [...$("log").querySelectorAll(".msg")].slice(1).forEach((m) => m.remove());  // resta il messaggio di benvenuto
+  chat.length = 0; answers.length = 0;
+  try {
+    const data = await api("/api/history?limit=20");
+    for (const item of data.items) { addMsg("user", esc(item.question)); addMsg("bot", renderAnswer(item.answer)); chat.push({ question: item.question, answer: item.answer.answer }); }
+  } catch (error) {}
+}
+$("newChat").onclick = async () => {
+  if (running) running.abort();
+  if (chat.length && !confirm("Svuotare la conversazione? Le domande fatte finora in questo spazio non saranno più visibili.")) return;
+  await api("/api/history", { method: "DELETE" }).catch(() => {});
+  loadHistory();
+};
 
 function tab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
@@ -330,7 +397,8 @@ $("settings").addEventListener("click", async (event) => {
 });
 
 async function afterSwitch() {
-  $("log").innerHTML = ""; answers.length = 0;
+  if (running) running.abort();
+  await loadHistory();
   await refreshStatus(); explore("");
   if ($("settings").classList.contains("on")) loadSettings();
 }
@@ -381,11 +449,17 @@ async function openDoc(doc) {
   $("fullText").onclick = () => openText(doc, 1, 0);
 }
 
-async function openText(doc, start, end) {
+async function openText(doc, start, end, hiStart, hiEnd) {
   const data = await api("/api/document?doc=" + encodeURIComponent(doc) + "&start=" + start + "&end=" + end);
   const folder = doc.includes("/") ? doc.slice(0, doc.lastIndexOf("/")) : "";
-  $("explore").innerHTML = crumbs(folder) + '<div class="label">Testo originale</div><pre>' + esc(data.text) + "</pre>";
+  const body = data.text.split("\n").map((line) => {
+    const n = parseInt(line, 10);  // le righe arrivano come "12| testo"; l'intestazione non ha numero
+    return '<span class="ln' + (hiStart && n >= hiStart && n <= hiEnd ? " hi" : "") + '">' + (esc(line) || " ") + "</span>";
+  }).join("");
+  $("explore").innerHTML = crumbs(folder) + '<div class="label">Testo originale' + (hiStart ? " · righe citate evidenziate" : "") + "</div><pre>" + body + "</pre>";
   tab("explore");
+  const first = $("explore").querySelector(".hi");
+  if (first) first.scrollIntoView({ block: "center" });
 }
 
 $("explore").addEventListener("click", (event) => {
@@ -440,7 +514,7 @@ async function refreshStatus() {
     wasBusy = s.busy;
   } catch (error) { $("status").className = "pill busy"; $("status").textContent = error.message; }
 }
-refreshStatus(); setInterval(refreshStatus, 3000); explore("");
+refreshStatus(); setInterval(refreshStatus, 3000); explore(""); loadHistory();
 </script>
 </body>
 </html>

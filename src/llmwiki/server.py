@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -22,7 +23,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from . import __version__
@@ -34,6 +35,7 @@ from .mcp_server import build_mcp
 from .store import norm_path
 from .tools import ToolError
 
+log = logging.getLogger("llmwiki.server")
 WEB_DIR = Path(__file__).parent / "web"
 PUBLIC_PATHS = {"/", "/favicon.ico"}
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
@@ -75,26 +77,27 @@ class AccessMiddleware:
         if origin and method not in ("GET", "HEAD", "OPTIONS"):
             if urlsplit(origin).netloc != headers.get(b"host", b"").decode():
                 return await _reply(send, 403, "richiesta da un'altra origine")
+        user = "locale" if local else None
         if path.startswith("/api/admin"):
             if not local:
                 return await _reply(send, 403, "l'amministrazione è possibile solo dal computer su cui gira l'app")
-        elif not local and path not in PUBLIC_PATHS and not path.startswith("/static/"):
+        elif not local and path not in PUBLIC_PATHS:
             tokens = {token.encode(): name for name, token in cfg.server.users.items() if token}
             header = headers.get(b"authorization", b"")
             supplied = header[7:].strip() if header[:7].lower() == b"bearer " else b""
-            user = None
             for token, name in tokens.items():
                 if hmac.compare_digest(token, supplied):
                     user = name
-            if user is None and (tokens or not cfg.server.trust_loopback or client not in LOOPBACK):
+            if user is None:
                 return await _reply(send, 401, "token mancante o non valido")
-        scope.setdefault("state", {})["local"] = local
+        scope.setdefault("state", {}).update(local=local, user=user or "")
         await self.app(scope, receive, send)
 
 
 class AskBody(BaseModel):
     question: str
     folder: str = ""
+    history: list[dict] = []  # scambi precedenti [{question, answer}] per gli approfondimenti
 
 
 class VerifyBody(BaseModel):
@@ -220,12 +223,64 @@ def create_app(wiki_or_hub: Wiki | Hub, *, run_indexer: bool = True) -> FastAPI:
         return {"saved": saved, "rejected": rejected}
 
     @app.post("/api/ask")
-    async def ask(body: AskBody) -> dict:
+    async def ask(body: AskBody, request: Request) -> dict:
         if not body.question.strip():
             raise HTTPException(400, "domanda vuota")
         hub.refresh_judge()
-        answer = await hub.wiki.ask(body.question.strip(), body.folder)
+        answer = await hub.wiki.ask(body.question.strip(), body.folder, history=body.history,
+                                    user=request.state.user)
         return answer.to_dict()
+
+    @app.post("/api/ask/stream")
+    async def ask_stream(body: AskBody, request: Request) -> StreamingResponse:
+        """Come /api/ask, ma racconta i passi mentre avvengono: una riga JSON per evento
+        (step, verifying, answer, error). Chiudere la connessione ferma l'agente."""
+        if not body.question.strip():
+            raise HTTPException(400, "domanda vuota")
+        hub.refresh_judge()
+        wiki, user = hub.wiki, request.state.user
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def run() -> None:
+            try:
+                answer = await wiki.ask(body.question.strip(), body.folder, history=body.history,
+                                        on_event=queue.put_nowait, user=user)
+                queue.put_nowait({"type": "answer", "answer": answer.to_dict()})
+            except (LLMError, ToolError, ValueError) as exc:
+                queue.put_nowait({"type": "error", "error": str(exc)})
+            except Exception as exc:
+                log.exception("domanda non riuscita")
+                queue.put_nowait({"type": "error", "error": f"errore interno: {exc!r}"})
+            finally:
+                queue.put_nowait(None)
+
+        task = asyncio.create_task(run())
+
+        async def events():
+            try:
+                while True:
+                    try:
+                        item = await asyncio.wait_for(queue.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield '{"type": "ping"}\n'  # tiene viva la connessione durante le attese lunghe
+                        continue
+                    if item is None:
+                        break
+                    yield json.dumps(item, ensure_ascii=False) + "\n"
+            finally:
+                task.cancel()  # se chi ha chiesto se ne va, il modello smette di lavorare
+
+        return StreamingResponse(events(), media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/history")
+    async def history(request: Request, limit: int = 30) -> dict:
+        return {"items": hub.wiki.store.list_history(request.state.user, limit)}
+
+    @app.delete("/api/history")
+    async def clear_history(request: Request) -> dict:
+        hub.wiki.store.clear_history(request.state.user)
+        return {"items": []}
 
     @app.post("/api/verify")
     async def verify(body: VerifyBody) -> dict:

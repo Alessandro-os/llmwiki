@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS nodes(
   updated REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS nodes_folder ON nodes(folder);
+CREATE TABLE IF NOT EXISTS history(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts REAL NOT NULL,
+  user TEXT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS history_user ON history(user, id);
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
   body, path UNINDEXED, kind UNINDEXED, start_line UNINDEXED, end_line UNINDEXED,
   tokenize='unicode61 remove_diacritics 2'
@@ -293,6 +301,28 @@ class Store:
         for folder in folders:
             if folder not in alive:
                 self.prune_nodes(folder, set())
+
+    # ---------------------------------------------------------------- cronologia delle domande
+
+    def add_history(self, user: str, question: str, answer: dict) -> None:
+        with self.lock:
+            self.db.execute(
+                "INSERT INTO history(ts, user, question, answer) VALUES(?,?,?,?)",
+                (time.time(), user, question, json.dumps(answer, ensure_ascii=False)),
+            )
+
+    def list_history(self, user: str, limit: int = 30) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT id, ts, question, answer FROM history WHERE user=? ORDER BY id DESC LIMIT ?",
+                (user, max(1, min(int(limit), 200))),
+            ).fetchall()
+        return [{"id": row["id"], "ts": row["ts"], "question": row["question"],
+                 "answer": json.loads(row["answer"])} for row in reversed(rows)]
+
+    def clear_history(self, user: str) -> None:
+        with self.lock:
+            self.db.execute("DELETE FROM history WHERE user=?", (user,))
 
     # ---------------------------------------------------------------- ricerca full-text
 

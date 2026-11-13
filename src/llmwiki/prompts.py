@@ -130,6 +130,15 @@ Per le domande ampie, che toccano aree diverse della wiki, hai anche `delegate`:
 esploratori in parallelo, ognuno con una sotto-domanda e una cartella di partenza, e ti \
 restituisce ciò che hanno trovato con le citazioni da riusare nella risposta finale."""
 
+FOLLOW_UP = """\
+Scambi precedenti di questa conversazione. Servono solo a capire a cosa si riferisce la nuova \
+domanda ("spiegami meglio il secondo punto", "e per i biatomici?"): i fatti della nuova risposta \
+vanno comunque riletti e citati dai documenti, non ripresi da qui.
+
+{past}
+
+Nuova domanda: {question}"""
+
 EXPLORER_NOTE = """
 
 In questa sessione sei un esploratore lanciato da un altro agente: rispondi solo alla \

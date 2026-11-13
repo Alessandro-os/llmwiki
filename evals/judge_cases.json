@@ -1,0 +1,173 @@
+{
+  "description": "Coppie (passaggio citato, affermazione) in italiano per misurare il giudice delle citazioni. supported=true: il passaggio sostiene l'affermazione. I negativi sono errori realistici: numero sbagliato, soggetto sbagliato, fatto vero ma non in quel passaggio.",
+  "passages": {
+    "P1": "In caso di ritardo nella consegna è prevista una penale del 2% del valore dell'ordine per ogni settimana completa di ritardo, fino a un massimo del 10%. Oltre le cinque settimane di ritardo il Cliente può risolvere il contratto.",
+    "P2": "La consegna avviene entro 30 giorni dalla data dell'ordine, franco magazzino del Cliente a Imola. Gli ordini urgenti seguono i tempi indicati nell'Allegato B. Pagamento tramite bonifico bancario a 60 giorni dalla data della fattura.",
+    "P3": "Ogni dipendente matura 26 giorni di ferie all'anno. Le ferie vanno richieste sul portale HR con almeno 15 giorni di anticipo e approvate dal responsabile.",
+    "P4": "η = 1 − T_f / T_c, con le temperature in kelvin. Dipende solo dalle due temperature, non dal gas usato. Sorgente calda a 500 K, sorgente fredda a 300 K: η = 1 − 300/500 = 0,40. Se la macchina assorbe 1000 J per ciclo, produce 400 J di lavoro e ne cede 600 J.",
+    "P5": "La variazione di energia interna di un sistema è uguale al calore assorbito meno il lavoro compiuto dal sistema: ΔU = Q − L. Per un gas monoatomico cv = 3/2 R, per uno biatomico cv = 5/2 R.",
+    "P6": "Il fatturato del trimestre è stato di 4,2 milioni di euro, in crescita dell'8% rispetto al terzo trimestre 2025. Due consegne di Acme Componenti sono arrivate con tre settimane di ritardo a luglio; è stata applicata la penale prevista dal contratto di fornitura n. 2026/014."
+  },
+  "cases": [
+    {
+      "passage": "P1",
+      "claim": "È prevista una penale del 2% del valore dell'ordine per ogni settimana completa di ritardo.",
+      "supported": true
+    },
+    {
+      "passage": "P1",
+      "claim": "La penale non può superare il 10% del valore dell'ordine.",
+      "supported": true
+    },
+    {
+      "passage": "P1",
+      "claim": "Dopo cinque settimane di ritardo il cliente può risolvere il contratto.",
+      "supported": true
+    },
+    {
+      "passage": "P1",
+      "claim": "È prevista una penale del 5% per ogni settimana di ritardo.",
+      "supported": false
+    },
+    {
+      "passage": "P1",
+      "claim": "La penale massima è del 20% del valore dell'ordine.",
+      "supported": false
+    },
+    {
+      "passage": "P1",
+      "claim": "Il cliente può risolvere il contratto dopo due settimane di ritardo.",
+      "supported": false
+    },
+    {
+      "passage": "P1",
+      "claim": "Il pagamento avviene tramite bonifico a 60 giorni dalla fattura.",
+      "supported": false
+    },
+    {
+      "passage": "P2",
+      "claim": "La merce viene consegnata entro 30 giorni dall'ordine.",
+      "supported": true
+    },
+    {
+      "passage": "P2",
+      "claim": "Il pagamento è a 60 giorni dalla data della fattura, con bonifico.",
+      "supported": true
+    },
+    {
+      "passage": "P2",
+      "claim": "È prevista una penale del 2% per ogni settimana di ritardo.",
+      "supported": false
+    },
+    {
+      "passage": "P2",
+      "claim": "La consegna avviene entro 15 giorni dall'ordine.",
+      "supported": false
+    },
+    {
+      "passage": "P2",
+      "claim": "La consegna avviene presso il magazzino di Bologna.",
+      "supported": false
+    },
+    {
+      "passage": "P3",
+      "claim": "I dipendenti hanno 26 giorni di ferie l'anno.",
+      "supported": true
+    },
+    {
+      "passage": "P3",
+      "claim": "Le ferie vanno richieste almeno 15 giorni prima sul portale HR.",
+      "supported": true
+    },
+    {
+      "passage": "P3",
+      "claim": "I dipendenti hanno 30 giorni di ferie l'anno.",
+      "supported": false
+    },
+    {
+      "passage": "P3",
+      "claim": "Le ferie si richiedono via email al responsabile.",
+      "supported": false
+    },
+    {
+      "passage": "P3",
+      "claim": "Sono consentiti due giorni di smart working a settimana.",
+      "supported": false
+    },
+    {
+      "passage": "P4",
+      "claim": "Il rendimento del ciclo di Carnot dipende solo dalle temperature delle due sorgenti.",
+      "supported": true
+    },
+    {
+      "passage": "P4",
+      "claim": "Tra 500 K e 300 K il rendimento è 0,40.",
+      "supported": true
+    },
+    {
+      "passage": "P4",
+      "claim": "Assorbendo 1000 J la macchina produce 400 J di lavoro.",
+      "supported": true
+    },
+    {
+      "passage": "P4",
+      "claim": "Il rendimento del ciclo di Carnot dipende dal tipo di gas.",
+      "supported": false
+    },
+    {
+      "passage": "P4",
+      "claim": "Tra 500 K e 300 K il rendimento è 0,60.",
+      "supported": false
+    },
+    {
+      "passage": "P4",
+      "claim": "L'entropia di un sistema isolato non diminuisce mai.",
+      "supported": false
+    },
+    {
+      "passage": "P5",
+      "claim": "L'energia interna varia di una quantità pari al calore assorbito meno il lavoro fatto dal sistema.",
+      "supported": true
+    },
+    {
+      "passage": "P5",
+      "claim": "Per un gas biatomico il calore specifico molare a volume costante vale 5/2 R.",
+      "supported": true
+    },
+    {
+      "passage": "P5",
+      "claim": "Per un gas monoatomico cv vale 5/2 R.",
+      "supported": false
+    },
+    {
+      "passage": "P5",
+      "claim": "La variazione di energia interna è uguale al calore assorbito più il lavoro compiuto dal sistema.",
+      "supported": false
+    },
+    {
+      "passage": "P6",
+      "claim": "Nel terzo trimestre il fatturato è stato di 4,2 milioni di euro.",
+      "supported": true
+    },
+    {
+      "passage": "P6",
+      "claim": "A luglio due consegne di Acme sono arrivate in ritardo ed è stata applicata la penale.",
+      "supported": true
+    },
+    {
+      "passage": "P6",
+      "claim": "Il fatturato è cresciuto del 18% rispetto all'anno precedente.",
+      "supported": false
+    },
+    {
+      "passage": "P6",
+      "claim": "Le consegne di Acme sono arrivate puntuali.",
+      "supported": false
+    },
+    {
+      "passage": "P6",
+      "claim": "Il fatturato del trimestre è stato di 4,6 milioni di euro.",
+      "supported": false
+    }
+  ]
+}

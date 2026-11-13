@@ -34,8 +34,12 @@ class Wiki:
             judge = nli.NliJudge()
         self.agent = WikiAgent(cfg, self.tools, self.llm, judge if cfg.verify.judge != "llm" else None)
 
-    async def ask(self, question: str, folder: str = "") -> Answer:
-        return await self.agent.ask(question, folder)
+    async def ask(self, question: str, folder: str = "", *, history: list[dict] | None = None,
+                  on_event=None, user: str = "") -> Answer:
+        answer = await self.agent.ask(question, folder, history=history, on_event=on_event)
+        if user:  # la cronologia è personale: ognuno rivede solo le proprie domande
+            self.store.add_history(user, question, answer.to_dict())
+        return answer
 
     async def verify(self, doc: str, start_line: int, end_line: int, claim: str) -> Citation:
         citation = Citation(id=1, doc=doc, start_line=start_line, end_line=end_line, claim=claim)

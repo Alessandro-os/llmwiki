@@ -94,6 +94,51 @@ def test_spaces_settings_and_users_from_the_ui(tmp_path):
     assert {s["name"] for s in apphome.Registry().spaces} == {"Studio", "Lavoro"}
 
 
+def test_live_progress_history_and_follow_up(tmp_path):
+    import json
+
+    cfg = mock_cfg(tmp_path)
+    cfg.server.users = {"anna": "token-di-anna"}
+    cfg.path = tmp_path / "wiki.toml"
+    cfg.save()
+    wiki = Wiki(cfg)
+    with TestClient(create_app(wiki), **LOCAL) as client:
+        client.post("/api/upload", data={"folder": "fisica"},
+                    files=[("files", ("carnot.md", NOTE.encode(), "text/markdown"))])
+        wait_ready(client, 1)
+
+        # la risposta arriva a eventi: i passi dell'agente, la verifica, poi la risposta
+        with client.stream("POST", "/api/ask/stream", json={"question": "rendimento temperature"}) as response:
+            events = [json.loads(line) for line in response.iter_lines() if line]
+        kinds = [event["type"] for event in events]
+        assert kinds[0] == "step" and events[0]["tool"] == "search"
+        assert "verifying" in kinds and kinds[-1] == "answer"
+        answer = events[-1]["answer"]
+        assert answer["citations"] and answer["warnings"] == 0
+
+        # la domanda resta nella cronologia di chi l'ha fatta, e solo nella sua
+        items = client.get("/api/history").json()["items"]
+        assert [item["question"] for item in items] == ["rendimento temperature"]
+        assert items[0]["answer"]["citations"][0]["doc"] == "fisica/carnot.md"
+
+        # approfondimento: gli scambi precedenti accompagnano la nuova domanda
+        follow = client.post("/api/ask", json={
+            "question": "e da cosa dipende il rendimento?",
+            "history": [{"question": "rendimento temperature", "answer": answer["answer"]}]})
+        assert follow.status_code == 200 and follow.json()["citations"]
+        assert len(client.get("/api/history").json()["items"]) == 2
+        assert client.delete("/api/history").json() == {"items": []}
+        assert client.get("/api/history").json()["items"] == []
+        assert client.post("/api/ask/stream", json={"question": "  "}).status_code == 400
+    with TestClient(create_app(Wiki(Config.load(cfg.path))), base_url="http://192.168.1.20:8765",
+                    client=("192.168.1.77", 50000)) as remote:
+        auth = {"Authorization": "Bearer token-di-anna"}
+        remote.post("/api/ask", json={"question": "rendimento"}, headers=auth)
+        assert len(remote.get("/api/history", headers=auth).json()["items"]) == 1
+    with TestClient(create_app(Wiki(Config.load(cfg.path))), **LOCAL) as client:
+        assert client.get("/api/history").json()["items"] == []  # quella di anna non è la mia
+
+
 def test_admin_is_local_only_and_remote_needs_token(tmp_path):
     cfg = mock_cfg(tmp_path)
     cfg.server.users = {"anna": "token-di-anna"}
