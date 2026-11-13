@@ -27,6 +27,7 @@ from .store import Store, map_id, node_id, sha_file, sha_text
 
 log = logging.getLogger("llmwiki.indexer")
 TREE_INTERVAL = 600.0  # secondi
+RETRY_SECONDS = 60.0   # attesa prima di riprovare quando il modello non risponde
 
 
 @dataclass
@@ -61,6 +62,8 @@ class Indexer:
         self._background: list[asyncio.Task] = []
         self.building = False
         self.last_error = ""
+        self.waiting = ""       # perché l'indicizzazione è ferma in attesa del modello
+        self._resume_at = 0.0   # prima di questo istante non si avviano nuove schede
         store.reset_stuck()
 
     # ---------------------------------------------------------------- ciclo di vita
@@ -119,6 +122,14 @@ class Indexer:
             self._dirty.clear()
             try:
                 await self.build_tree()
+            except LLMError as exc:
+                if not exc.unavailable:
+                    log.exception("aggiornamento dell'albero fallito")
+                    self.last_error = f"albero: {exc}"
+                    continue
+                self.waiting = str(exc)  # modello spento: si riprova più tardi, da dove si era
+                await asyncio.sleep(RETRY_SECONDS)
+                self._dirty.set()
             except Exception as exc:
                 log.exception("aggiornamento dell'albero fallito")
                 self.last_error = f"albero: {exc}"
@@ -128,6 +139,7 @@ class Indexer:
         counts["building_tree"] = self.building
         counts["busy"] = bool(self._tasks) or self.building or self._dirty.is_set()
         counts["last_error"] = self.last_error
+        counts["waiting"] = self.waiting
         counts["llm_calls"] = dict(self.llm.calls)
         return counts
 
@@ -154,6 +166,8 @@ class Indexer:
             self.store.delete_doc(path)
         if removed:
             self._dirty.set()
+        if asyncio.get_running_loop().time() < self._resume_at:
+            return  # il modello non rispondeva: si aspetta prima di riprovare
         for row in self.store.all_docs():
             if row["status"] == "pending" and row["path"] not in self._tasks:
                 task = asyncio.create_task(self._index_doc(row["path"]))
@@ -218,10 +232,22 @@ class Indexer:
                 self.store.write_atomic(self.store.summary_file(path), summary)
                 await asyncio.to_thread(self.store.index_summary, path, body)
                 self.store.set_ready(path, title_of(body, path), sha_text(summary))
+                self.waiting = ""
                 self._dirty.set()
             except asyncio.CancelledError:
                 raise
-            except (ExtractError, LLMError, OSError, ValueError) as exc:
+            except LLMError as exc:
+                if exc.unavailable:
+                    # Il modello non risponde: il documento torna in coda e si riprova tra poco.
+                    # Non è un errore del documento, e non deve restare segnato come tale.
+                    log.warning("modello non raggiungibile, %s resta in coda: %s", path, exc)
+                    self.store.set_status(path, "pending")
+                    self.waiting = str(exc)
+                    self._resume_at = asyncio.get_running_loop().time() + RETRY_SECONDS
+                else:
+                    log.warning("documento %s non indicizzato: %s", path, exc)
+                    self.store.set_status(path, "error", str(exc), bump=True)
+            except (ExtractError, OSError, ValueError) as exc:
                 log.warning("documento %s non indicizzato: %s", path, exc)
                 self.store.set_status(path, "error", str(exc), bump=True)
             except Exception as exc:
@@ -229,7 +255,21 @@ class Indexer:
                 self.store.set_status(path, "error", repr(exc), bump=True)
 
     async def _summarize(self, path: str, lines: list[str]) -> str:
+        """Scrive la scheda. La quantità di testo per richiesta parte dall'impostazione, tiene
+        conto della finestra del modello se è nota e, se il modello rifiuta comunque la
+        richiesta, si dimezza: un modello con poco contesto legge a pezzi più piccoli."""
         limit = max(2000, self.cfg.index.chunk_chars)
+        if self.cfg.llm.context_tokens:
+            limit = max(2000, min(limit, self.cfg.llm.context_tokens * 2))
+        while True:
+            try:
+                return await self._summarize_in(path, lines, limit)
+            except LLMError as exc:
+                if not exc.rejected or exc.status in (401, 403, 404) or limit <= 2000:
+                    raise
+                limit = max(2000, limit // 2)
+
+    async def _summarize_in(self, path: str, lines: list[str], limit: int) -> str:
         header = f"Documento: {path}\n\n"
         if sum(len(line) + 8 for line in lines) <= limit:
             return await self._call(prompts.DOC_SUMMARY, header + numbered(lines), "doc")

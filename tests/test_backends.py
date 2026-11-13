@@ -85,6 +85,41 @@ def test_openai_judge_falls_back_without_logprobs():
     asyncio.run(scenario())
 
 
+def test_claude_model_that_rejects_optional_parameters_still_works(monkeypatch):
+    """Un modello Claude che non conosce `effort` o il rilancio lato server: l'app toglie il
+    parametro rifiutato, riprova e non lo manda più."""
+    import anthropic
+    import httpx2
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "chiave-di-test")
+    seen: list[dict] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        for parameter, message in (("fallbacks", "fallbacks: Extra inputs are not permitted"),
+                                   ("output_config", "output_config.effort is not supported by this model")):
+            if parameter in body:
+                return httpx2.Response(400, json={"type": "error", "error": {
+                    "type": "invalid_request_error", "message": message}})
+        return httpx2.Response(200, json={
+            "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+            "content": [{"type": "text", "text": "Risposta"}], "stop_reason": "end_turn",
+            "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
+
+    async def scenario():
+        llm = AnthropicLLM(LLMConfig(provider="anthropic"))
+        llm.client = anthropic.AsyncAnthropic(
+            http_client=anthropic.DefaultAsyncHttpxClient(transport=httpx2.MockTransport(handler)),
+            max_retries=0)
+        assert await llm.complete(model="claude-opus-5-5", system="s", prompt="p", effort="high") == "Risposta"
+        assert len(seen) == 3 and "fallbacks" not in seen[-1] and "output_config" not in seen[-1]
+        assert await llm.complete(model="claude-opus-5-5", system="s", prompt="p", effort="high") == "Risposta"
+        assert len(seen) == 4  # la seconda volta va dritta, senza i parametri rifiutati
+
+    asyncio.run(scenario())
+
+
 def test_server_down_is_not_mistaken_for_missing_logprobs(monkeypatch):
     import pytest
 

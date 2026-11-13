@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 from . import prompts
 from .config import Config
-from .llm import LLM, ToolCall, ToolResult
+from .llm import LLM, LLMError, ToolCall, ToolResult
 from .tools import ANSWER_TOOL, DELEGATE_TOOL, NAV_TOOLS, ToolError, WikiTools
 from .verify import RECHECKED, VERIFIED, WARNING, Citation, Verifier
 
@@ -30,9 +30,11 @@ class Answer:
     trace: list[dict] = field(default_factory=list)
     complete: bool = True
     verified: bool = False
+    mode: str = "agente"  # "ricerca diretta" se il modello non ha saputo guidare gli strumenti
 
     def to_dict(self) -> dict:
         return {
+            "mode": self.mode,
             "question": self.question,
             "answer": self.answer,
             "citations": [c.to_dict() for c in self.citations],
@@ -77,6 +79,9 @@ class WikiAgent:
         self.cfg, self.tools, self.llm = cfg, tools, llm
         self.verifier = Verifier(cfg, tools, llm, nli)
         self._explorer_slots = asyncio.Semaphore(max(1, cfg.agent.explorers))
+        # Un solo risultato non deve riempire la finestra del modello: al più circa un terzo
+        # (un token vale 3-4 caratteri), quando la finestra è nota.
+        self._result_chars = min(MAX_RESULT_CHARS, cfg.llm.context_tokens or MAX_RESULT_CHARS)
 
     async def ask(self, question: str, folder: str = "", *, explorer: bool = False,
                   verify: bool | None = None, history: list[dict] | None = None,
@@ -133,12 +138,37 @@ class WikiAgent:
             else:
                 turn = await conversation.next(list(outputs))
 
+        if not result.complete and not explorer:
+            await self._direct_answer(question, result, emit)
         should_verify = self.cfg.verify.enabled if verify is None else verify
         if should_verify and result.citations:
             emit({"type": "verifying", "count": len(result.citations)})
             result.citations = await self.verifier.check_all(result.citations)
             result.verified = True
         return result
+
+    async def _direct_answer(self, question: str, result: Answer, emit) -> None:
+        """Ripiego per i modelli che non riescono a guidare gli strumenti: l'app cerca da sé i
+        passaggi più pertinenti e chiede una risposta fondata solo su quelli. Meno fine della
+        navigazione, ma funziona con qualunque modello capace di leggere e scrivere."""
+        emit({"type": "step", "tool": "search", "args": {"query": question}, "explorer": False})
+        hits = [hit for hit in self.tools.search(question, limit=8)["results"] if hit["kind"] == "text"][:5]
+        if not hits:
+            return
+        passages = "\n\n".join(
+            self.tools.read_document(hit["doc"], hit["start_line"], hit["end_line"]) for hit in hits)
+        try:
+            data = await self.llm.complete_json(
+                model=self.cfg.llm.agent_model, system=prompts.GROUNDED,
+                prompt=f"Domanda: {question}\n\nPassaggi:\n\n{passages}",
+                schema=ANSWER_TOOL["parameters"], effort=self.cfg.llm.agent_effort, kind="agent",
+            )
+        except LLMError:
+            return
+        answer = str(data.get("answer", "")).strip()
+        if answer:
+            result.answer, result.citations = answer, _parse_citations(data.get("citations"))
+            result.complete, result.mode = True, "ricerca diretta"
 
     # ---------------------------------------------------------------- esecuzione dei tool
 
@@ -160,8 +190,8 @@ class WikiAgent:
             entry["error"] = True
             return ToolResult(call.id, f"Errore: {exc}", is_error=True)
         text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
-        if len(text) > MAX_RESULT_CHARS:
-            text = text[:MAX_RESULT_CHARS] + "\n[... risultato troncato: restringi la richiesta]"
+        if len(text) > self._result_chars:
+            text = text[: self._result_chars] + "\n[... risultato troncato: restringi la richiesta]"
         return ToolResult(call.id, text)
 
     async def _delegate(self, args: dict, emit=None) -> dict:

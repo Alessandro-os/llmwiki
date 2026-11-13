@@ -134,6 +134,23 @@ Per le domande ampie, che toccano aree diverse della wiki, hai anche `delegate`:
 esploratori in parallelo, ognuno con una sotto-domanda e una cartella di partenza, e ti \
 restituisce ciò che hanno trovato con le citazioni da riusare nella risposta finale."""
 
+TOOL_PROTOCOL = """\
+Per lavorare hai questi strumenti:
+
+{tools}
+
+A ogni turno rispondi SOLO con un oggetto JSON, senza altro testo prima o dopo, in questa forma:
+{{"calls": [{{"tool": "nome_dello_strumento", "args": {{"argomento": "valore"}}}}]}}
+Puoi mettere più chiamate nello stesso turno. Dopo ogni turno ricevi i risultati e prosegui. \
+Quando hai finito chiami lo strumento `answer`: anche la risposta finale va consegnata così."""
+
+GROUNDED = """\
+Rispondi alla domanda usando solo i passaggi forniti, che arrivano dai documenti dell'utente con \
+le righe numerate (formato `N| testo`). Ogni affermazione fattuale porta un marcatore [n] che \
+rimanda a una citazione con il documento, l'intervallo di righe stretto che contiene quel fatto \
+e `claim`, cioè l'affermazione riscritta in modo autosufficiente. Se i passaggi non contengono \
+la risposta, dillo e non citare nulla. Rispondi nella lingua della domanda."""
+
 FOLLOW_UP = """\
 Scambi precedenti di questa conversazione. Servono solo a capire a cosa si riferisce la nuova \
 domanda ("spiegami meglio il secondo punto", "e per i biatomici?"): i fatti della nuova risposta \

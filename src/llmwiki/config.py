@@ -39,6 +39,12 @@ class LLMConfig:
     # Solo provider "openai": manda *_effort al server come `reasoning_effort` (none, low,
     # medium, high). Con i modelli locali che "pensano": meno ragionamento, più velocità.
     send_reasoning_effort: bool = False
+    # Come l'agente usa gli strumenti: "auto" prova le chiamate native del modello e passa da
+    # solo a un protocollo testuale se non funzionano; "native" e "text" lo forzano.
+    tool_mode: str = "auto"
+    # Finestra di contesto del modello in token; 0 = non nota (nessun limite applicato).
+    # Con i modelli locali piccoli evita di mandare più testo di quanto ne leggano.
+    context_tokens: int = 0
     refusal_fallbacks: bool = True  # solo Claude: un rifiuto dei classificatori viene rilanciato lato server
     timeout: float = 600.0
 
