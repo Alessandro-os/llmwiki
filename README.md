@@ -57,6 +57,21 @@ confrontandolo su citazioni italiane giuste e sbagliate: non ne ha accettata nes
 Da solo respinge una parte delle citazioni corrette più lunghe, ed è per questo che è il primo
 filtro di una cascata e non l'unico giudice.
 
+## Misure
+
+Rilevate il 2026-11-14 con `evals/run.py` su un PC con RTX 3080 Ti, modello locale Qwen 3.8
+Flash Next servito da Strata (una richiesta alla volta). Sono 9 domande su 10 documenti di
+esempio: indicano che il meccanismo funziona, non sono un benchmark.
+
+| Cosa | Risultato |
+|---|---|
+| Risposte corrette, ragionamento predefinito | 9 su 9 · 41 citazioni, nessuna non confermata · 111 s di media |
+| Risposte corrette, ragionamento ridotto | 9 su 9 · 18 citazioni, nessuna non confermata · 68 s di media |
+| Decision model su 32 citazioni italiane | 0 sbagliate accettate, 0 giuste respinte · circa 160 ms l'una sulla CPU |
+| Giudice del modello linguistico (logprob) sugli stessi casi | 0 sbagliate accettate, 1 giusta respinta · circa 2,3 s l'una |
+| Indicizzazione | circa 45 s a documento (scheda) con questo modello |
+| Struttura con 5000 documenti (modello finto) | seconda passata 1,4 s senza chiamate · ricerca 8 ms · un documento nuovo rigenera solo il suo ramo |
+
 ## Dove stanno i dati
 
 ```
