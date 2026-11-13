@@ -135,8 +135,14 @@ def cmd_answers(args) -> int:
             })
             last = results[-1]
             print(f"{'OK  ' if last['ok'] else 'NO  '} {last['seconds']:4.0f} s · {last['citations']} citazioni "
-                  f"({last['verified']} al primo giudice, {warnings} ⚠) · {item['question'][:70]}"
+                  f"({last['verified']} confermate subito, {warnings} ⚠) · {item['question'][:70]}"
                   + (f"\n      {'; '.join(why)}" if why else ""))
+            for c in answer.citations:
+                if c.status == WARNING:  # da leggere a mano: errore dell'agente o verifica troppo severa?
+                    print(f"      ⚠ [{c.method} {c.confidence}] {c.doc} righe {c.start_line}-{c.end_line}\n"
+                          f"        affermazione: {c.claim}\n        testo citato: {c.passage[:300]!r}\n"
+                          f"        motivo: {c.note}")
+            last["warning_details"] = [c.to_dict() for c in answer.citations if c.status == WARNING]
         await wiki.aclose()
         return results
 
@@ -144,7 +150,7 @@ def cmd_answers(args) -> int:
     total = len(results)
     cites = sum(r["citations"] for r in results)
     print(f"\nrisposte corrette {sum(r['ok'] for r in results)}/{total} · citazioni {cites}, di cui "
-          f"confermate al primo giudice {sum(r['verified'] for r in results)}, non confermate "
+          f"confermate subito {sum(r['verified'] for r in results)}, non confermate "
           f"{sum(r['warnings'] for r in results)} · tempo medio {sum(r['seconds'] for r in results) / max(total, 1):.0f} s")
     (work / "ultimo_risultato.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if all(r["ok"] for r in results) else 1
@@ -201,7 +207,7 @@ def cmd_scale(args) -> int:
 
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
-        stream.reconfigure(encoding="utf-8", errors="replace")
+        stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)  # righe visibili subito
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     p_judge = sub.add_parser("judge")

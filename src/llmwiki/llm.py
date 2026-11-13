@@ -443,7 +443,7 @@ class MockLLM(LLM):
     async def complete_json(self, *, model, system, prompt, schema, effort="", kind="") -> dict:
         self._count(kind)
         claim, _, passage = prompt.partition("PASSAGGIO:")
-        passage = re.sub(r"^\(righe citate: [^)]*\)$|^\d+\|", "", passage, flags=re.M)
+        passage = re.sub(r"^\(righe citate: [^)]*\)$|^\d+\||^Documento: .*$", "", passage, flags=re.M)
         score = _overlap(claim.replace("AFFERMAZIONE:", ""), passage)
         if kind == "recheck":
             return {"supported": score >= 0.6, "reason": f"sovrapposizione {score:.2f}",

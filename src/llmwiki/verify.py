@@ -90,7 +90,9 @@ class Verifier:
         # working prevede...", e quel contesto nelle sole righe citate spesso non c'è.
         row = self.tools.store.get_doc(path)
         title = (row["title"] if row else "") or path
-        premise = f"Documento: {title}.\n{c.passage}"
+        span = (f"righe {start}-{end} di {len(lines)}"
+                + (": l'intero documento" if start == 1 and end == len(lines) else ""))
+        premise = f"Documento: {title} ({span}).\n{c.passage}"
 
         # 1a. decision model dedicato (NLI): decine di millisecondi, non accetta citazioni
         #     sbagliate ma ne respinge alcune giuste, soprattutto se lunghe o riformulate
@@ -125,7 +127,8 @@ class Verifier:
         try:
             verdict = await self.llm.complete_json(
                 model=self.cfg.llm.agent_model, system=prompts.RECHECK,
-                prompt=prompts.judge_prompt(c.claim, f"(righe citate: {start}-{end})\n{window}"),
+                prompt=prompts.judge_prompt(
+                    c.claim, f"(righe citate: {start}-{end}; il documento ha {len(lines)} righe)\n{window}"),
                 schema=RECHECK_SCHEMA, effort="medium", kind="recheck",
             )
         except LLMError as exc:

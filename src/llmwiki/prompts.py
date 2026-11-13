@@ -120,7 +120,9 @@ rimanda a una citazione: documento, intervallo di righe stretto (le righe che co
 proprio quel fatto) e `claim`, cioè l'affermazione riscritta in modo autosufficiente. Ogni \
 citazione viene poi verificata automaticamente confrontando `claim` con quelle righe, quindi \
 un intervallo sbagliato o troppo largo la fa fallire.
-- Se i documenti non contengono la risposta, dillo invece di supporre.
+- Se i documenti non contengono la risposta, dillo invece di supporre. Se affermi che un \
+documento *non* contiene qualcosa, cita l'intero documento o l'intera sezione che hai letto: \
+un'assenza si verifica solo su tutto il testo in cui la cosa dovrebbe trovarsi.
 
 Rispondi nella lingua della domanda."""
 
@@ -149,7 +151,12 @@ JUDGE_RULES = """\
 Sei un verificatore di citazioni. Ricevi un'AFFERMAZIONE e il PASSAGGIO di documento citato \
 come fonte. Il passaggio supporta l'affermazione solo se contiene esplicitamente i fatti \
 affermati (numeri, date, nomi, condizioni). Non basta che parli dello stesso argomento, e non \
-contano le tue conoscenze esterne."""
+contano le tue conoscenze esterne.
+
+Caso particolare, le affermazioni di assenza ("il documento non prevede penali", "tratta solo \
+di consegne e pagamenti"): sono supportate se il passaggio citato è l'intero documento, o \
+l'intera parte in cui quella cosa dovrebbe trovarsi, e lì effettivamente non compare. \
+L'intestazione del passaggio dice quali righe sono citate e quante ne ha il documento."""
 
 JUDGE_WORD = JUDGE_RULES + "\n\nRispondi con una sola parola: YES se la supporta, NO altrimenti."
 
@@ -163,7 +170,9 @@ Sei il secondo controllo di una citazione che un primo verificatore automatico n
 confermato. Ricevi un'AFFERMAZIONE e un PASSAGGIO con righe numerate (formato `N| testo`): \
 sono le righe citate più un po' di contesto attorno. Stabilisci se il passaggio supporta \
 l'affermazione: deve contenere esplicitamente i fatti affermati (numeri, date, nomi, \
-condizioni); stesso argomento non basta.
+condizioni); stesso argomento non basta. Un'affermazione di assenza ("non prevede penali", \
+"tratta solo di...") è supportata se le righe citate coprono l'intero documento, o l'intera \
+parte in cui quella cosa dovrebbe trovarsi, e lì effettivamente non compare.
 
 Rispondi con `supported`, una `reason` di una frase, e `start_line`/`end_line`: le righe che \
 la supportano se è supportata, altrimenti 0 e 0."""
