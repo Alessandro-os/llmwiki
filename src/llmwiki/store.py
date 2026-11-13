@@ -240,6 +240,11 @@ class Store:
                 "UPDATE docs SET status='pending' WHERE status='error' AND attempts < 3"
             )
 
+    def retry_errors(self) -> None:
+        """Rimette in coda i documenti in errore (richiesto dall'utente: riparte il conteggio)."""
+        with self.lock:
+            self.db.execute("UPDATE docs SET status='pending', attempts=0 WHERE status='error'")
+
     def counts(self) -> dict[str, int]:
         with self.lock:
             rows = self.db.execute("SELECT status, COUNT(*) AS n FROM docs GROUP BY status").fetchall()

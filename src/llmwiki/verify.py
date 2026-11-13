@@ -3,11 +3,10 @@
 Per ogni citazione si confrontano due testi: l'affermazione scritta dall'agente e le righe del
 documento indicate come fonte.
 
-  1. Decision model: "il testo supporta la frase?" -> sì/no con una confidenza. Prima il
-     modello NLI dedicato (se installato), poi sui casi dubbi un sì/no del modello linguistico.
-     Sopra soglia la citazione è confermata.
-  2. Sotto soglia, secondo tentativo: il modello rilegge il passaggio con un po' di contesto
-     attorno e, se la trova, corregge le righe citate.
+  1. Giudici veloci, uno dopo l'altro finché uno conferma: il decision model NLI (se
+     installato), poi un sì/no del modello linguistico. Sopra soglia la citazione è confermata.
+  2. Sotto soglia, ricontrollo: il modello rilegge il passaggio con un po' di contesto attorno
+     e, se trova il fatto poco più in là, corregge le righe citate.
   3. Se fallisce anche quello, la citazione resta ma con un avviso (il triangolino).
 """
 
@@ -22,8 +21,8 @@ from .extract import numbered
 from .llm import LLM, LLMError
 from .tools import ToolError, WikiTools
 
-VERIFIED = "verified"    # confermata dal decision model
-RECHECKED = "rechecked"  # confermata al secondo tentativo
+VERIFIED = "verified"    # confermata da un giudice veloce
+RECHECKED = "rechecked"  # confermata al ricontrollo
 WARNING = "warning"      # non confermata: mostrare l'avviso
 
 RECHECK_SCHEMA = {
@@ -69,89 +68,78 @@ class Verifier:
     async def check_all(self, citations: list[Citation]) -> list[Citation]:
         return list(await asyncio.gather(*(self.check(c) for c in citations)))
 
-    async def check(self, citation: Citation) -> Citation:
+    async def check(self, c: Citation) -> Citation:
         async with self._slots:
-            return await self._check(citation)
+            if not c.claim.strip():
+                return _warn(c, "citazione senza affermazione da verificare")
+            try:
+                path, start, end, lines = self.tools.passage(c.doc, c.start_line, c.end_line)
+            except (ToolError, ValueError, TypeError) as exc:
+                return _warn(c, f"fonte non trovata: {exc}")
+            end = min(end, start + self.cfg.verify.max_passage_lines - 1)
+            c.doc, c.start_line, c.end_line = path, start, end
+            c.passage = "\n".join(lines[start - 1 : end])
+            # I giudici sanno anche di che documento si tratta: l'agente scrive "la policy
+            # smart working prevede...", e quel contesto nelle sole righe citate spesso manca.
+            row = self.tools.store.get_doc(path)
+            title = (row["title"] if row else "") or path
 
-    async def _check(self, c: Citation) -> Citation:
-        vcfg = self.cfg.verify
-        if not c.claim.strip():
-            return self._warn(c, "citazione senza affermazione da verificare")
+            judges = [self._nli] if self.nli is not None else []
+            if self.nli is None or self.cfg.verify.judge != "nli":
+                judges.append(self._llm_judge)
+            for judge in judges:
+                await judge(c, title, len(lines))
+                if c.confidence is not None and c.confidence >= self.cfg.verify.threshold:
+                    c.status = VERIFIED
+                    return c
+            return await self._recheck(c, lines)
+
+    async def _nli(self, c: Citation, title: str, _total: int) -> None:
+        """Decine di millisecondi sulla CPU. Non accetta citazioni sbagliate, ma ne respinge
+        alcune giuste se lunghe o riformulate: per questo dopo c'è un secondo giudice."""
         try:
-            path, start, end, lines = self.tools.passage(c.doc, c.start_line, c.end_line)
-        except (ToolError, ValueError, TypeError) as exc:
-            return self._warn(c, f"fonte non trovata: {exc}")
-        if end - start + 1 > vcfg.max_passage_lines:
-            end = start + vcfg.max_passage_lines - 1
-        c.doc, c.start_line, c.end_line = path, start, end
-        c.passage = "\n".join(lines[start - 1 : end])
+            c.confidence = await asyncio.to_thread(self.nli.score, c.claim, c.passage, f"Documento: {title}.")
+            c.method = "nli"
+        except Exception as exc:  # modello illeggibile o corrotto: decide il giudice successivo
+            c.note = f"decision model non disponibile ({exc!r})"
 
-        # Il giudice vede anche di che documento si tratta: l'agente scrive "la policy smart
-        # working prevede...", e quel contesto nelle sole righe citate spesso non c'è.
-        row = self.tools.store.get_doc(path)
-        title = (row["title"] if row else "") or path
-        span = (f"righe {start}-{end} di {len(lines)}"
-                + (": l'intero documento" if start == 1 and end == len(lines) else ""))
-        premise = f"Documento: {title} ({span}).\n{c.passage}"
+    async def _llm_judge(self, c: Citation, title: str, total: int) -> None:
+        """Sì/no del modello linguistico, con i logprob se il server li espone."""
+        whole = ": l'intero documento" if c.start_line == 1 and c.end_line == total else ""
+        premise = f"Documento: {title} (righe {c.start_line}-{c.end_line} di {total}{whole}).\n{c.passage}"
+        try:
+            c.confidence, method = await self.llm.judge(
+                model=self.cfg.llm.judge_model, claim=c.claim, passage=premise)
+            c.method = f"{c.method}+{method}".lstrip("+")
+        except LLMError as exc:
+            c.note = f"giudice non disponibile ({exc})"
 
-        # 1a. decision model dedicato (NLI): decine di millisecondi, non accetta citazioni
-        #     sbagliate ma ne respinge alcune giuste, soprattutto se lunghe o riformulate
-        if self.nli is not None:
-            try:
-                c.confidence = await asyncio.to_thread(
-                    self.nli.score, c.claim, c.passage, f"Documento: {title}.")
-                c.method = "nli"
-            except Exception as exc:  # modello illeggibile o corrotto: decide il passo dopo
-                c.note = f"decision model non disponibile ({exc!r})"
-            if c.confidence is not None and c.confidence >= vcfg.threshold:
-                c.status = VERIFIED
-                return c
-
-        # 1b. sì/no del modello linguistico (con i logprob, se il server li espone)
-        if self.nli is None or vcfg.judge != "nli":
-            try:
-                c.confidence, method = await self.llm.judge(
-                    model=self.cfg.llm.judge_model, claim=c.claim, passage=premise
-                )
-                c.method = (c.method + "+" + method).lstrip("+")
-            except LLMError as exc:
-                c.note = f"giudice non disponibile ({exc})"
-            if c.confidence is not None and c.confidence >= vcfg.threshold:
-                c.status = VERIFIED
-                return c
-
-        # 2. sotto soglia: ricontrollo con più contesto
-        first = max(1, start - vcfg.context_lines)
-        last = min(len(lines), end + vcfg.context_lines)
-        window = numbered(lines[first - 1 : last], first)
+    async def _recheck(self, c: Citation, lines: list[str]) -> Citation:
+        first = max(1, c.start_line - self.cfg.verify.context_lines)
+        last = min(len(lines), c.end_line + self.cfg.verify.context_lines)
+        header = f"(righe citate: {c.start_line}-{c.end_line}; il documento ha {len(lines)} righe)"
         try:
             verdict = await self.llm.complete_json(
                 model=self.cfg.llm.agent_model, system=prompts.RECHECK,
-                prompt=prompts.judge_prompt(
-                    c.claim, f"(righe citate: {start}-{end}; il documento ha {len(lines)} righe)\n{window}"),
+                prompt=prompts.judge_prompt(c.claim, f"{header}\n{numbered(lines[first - 1 : last], first)}"),
                 schema=RECHECK_SCHEMA, effort="medium", kind="recheck",
             )
         except LLMError as exc:
-            return self._warn(c, f"ricontrollo non riuscito: {exc}")
-
-        if verdict.get("supported") is True:
-            c.status = RECHECKED
-            c.method = (c.method + "+recheck").lstrip("+")
-            new_start, new_end = _as_int(verdict.get("start_line")), _as_int(verdict.get("end_line"))
-            if first <= new_start <= new_end <= last:  # il ricontrollo ha trovato le righe giuste
-                c.start_line, c.end_line = new_start, new_end
-                c.passage = "\n".join(lines[new_start - 1 : new_end])
-            c.note = str(verdict.get("reason", ""))[:300]
-            return c
-
-        # 3. fallito due volte
-        return self._warn(c, str(verdict.get("reason", "")) or "il passaggio citato non supporta l'affermazione")
-
-    @staticmethod
-    def _warn(c: Citation, note: str) -> Citation:
-        c.status = WARNING
-        c.note = note[:300]
+            return _warn(c, f"ricontrollo non riuscito: {exc}")
+        reason = str(verdict.get("reason", ""))
+        if verdict.get("supported") is not True:
+            return _warn(c, reason or "il passaggio citato non supporta l'affermazione")
+        c.status, c.method, c.note = RECHECKED, f"{c.method}+recheck".lstrip("+"), reason[:300]
+        start, end = _as_int(verdict.get("start_line")), _as_int(verdict.get("end_line"))
+        if first <= start <= end <= last:  # il ricontrollo ha indicato le righe giuste
+            c.start_line, c.end_line = start, end
+            c.passage = "\n".join(lines[start - 1 : end])
         return c
+
+
+def _warn(c: Citation, note: str) -> Citation:
+    c.status, c.note = WARNING, note[:300]
+    return c
 
 
 def _as_int(value) -> int:

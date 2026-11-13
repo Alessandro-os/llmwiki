@@ -1,4 +1,8 @@
-"""Configurazione: un file wiki.toml nella radice del progetto."""
+"""Configurazione di uno spazio: il file wiki.toml nella sua cartella.
+
+I valori predefiniti e il significato di ogni impostazione stanno qui, in un posto solo: il
+file su disco viene sempre scritto da `Config.save()`.
+"""
 
 from __future__ import annotations
 
@@ -9,70 +13,33 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-DEFAULT_TOML = '''\
-# Configurazione di llmwiki. I percorsi sono relativi a questo file.
-
-[paths]
-docs = "data/docs"   # cartella condivisa con i documenti originali
-wiki = "data/wiki"   # riassunti, sintesi, mappe e indice (generati)
-
-[llm]
-# "anthropic"  -> Claude tramite SDK ufficiale (credenziali: ANTHROPIC_API_KEY o `ant auth login`)
-# "openai"     -> qualunque endpoint compatibile OpenAI: Ollama, LM Studio, vLLM, OpenRouter...
-# "mock"       -> nessun modello: serve solo per provare la pipeline senza spendere token
-provider = "anthropic"
-agent_model = "claude-opus-5-5"     # agente che naviga e risponde
-summary_model = "claude-opus-5-5"   # riassunti in fase di indicizzazione (il grosso dei token)
-judge_model = "claude-haiku-5-5"    # decision model veloce per il fact-checking
-
-# Solo per provider = "openai" (esempio con Ollama in locale):
-# base_url = "http://localhost:11434/v1"
-# api_key_env = "OPENAI_API_KEY"
-# agent_model = "qwen3:14b"
-# summary_model = "qwen3:14b"
-# judge_model = "qwen3:4b"
-
-[index]
-concurrency = 8      # chiamate al modello in parallelo durante l'indicizzazione
-fanout = 8           # quanti elementi riassume ogni nodo dell'albero
-chunk_chars = 24000  # i documenti più lunghi vengono riassunti a pezzi, in parallelo
-watch_seconds = 20   # ogni quanto il server ricontrolla la cartella dei documenti
-
-[verify]
-enabled = true
-judge = "auto"       # "auto": decision model NLI se installato, altrimenti il modello linguistico
-threshold = 0.6      # confidenza minima del decision model per accettare una citazione
-context_lines = 20   # righe di contesto in più date al ricontrollo
-
-[agent]
-max_steps = 24
-explorers = 4        # sotto-agenti in parallelo quando l'agente delega
-explorer_steps = 12
-
-[server]
-host = "127.0.0.1"   # "0.0.0.0" per renderlo raggiungibile dai colleghi (richiede almeno un utente)
-port = 8765
-
-# Un token per utente: `llmwiki user add <nome>` aggiunge una riga qui sotto.
-[server.users]
-'''
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+SECTIONS = ("llm", "index", "verify", "agent", "server")
+# Una riga di spiegazione per sezione, scritta nel file per chi lo apre a mano.
+NOTES = {
+    "llm": "provider: anthropic | openai (qualunque server compatibile: Strata, Ollama, LM Studio) | mock",
+    "index": "concurrency: richieste al modello in parallelo; fanout: elementi riassunti da ogni nodo",
+    "verify": "judge: auto | nli | llm; threshold: confidenza minima per accettare una citazione",
+    "agent": "max_steps: letture al massimo per domanda; explorers: sotto-agenti in parallelo",
+    "server": "host 0.0.0.0 espone l'app in rete (serve almeno un utente in [server.users])",
+}
 
 
 @dataclass
 class LLMConfig:
     provider: str = "anthropic"
-    agent_model: str = "claude-opus-5-5"
-    summary_model: str = "claude-opus-5-5"
-    judge_model: str = "claude-haiku-5-5"
-    base_url: str = "http://localhost:11434/v1"
-    api_key_env: str = "OPENAI_API_KEY"
+    agent_model: str = "claude-opus-5-5"      # naviga e risponde
+    summary_model: str = "claude-opus-5-5"    # schede, sintesi e mappe (il grosso dei token)
+    judge_model: str = "claude-haiku-5-5"     # sì/no sulle citazioni quando decide il modello linguistico
+    base_url: str = "http://localhost:11434/v1"  # solo provider "openai"
+    api_key_env: str = "OPENAI_API_KEY"          # solo provider "openai"
     agent_effort: str = "high"
     summary_effort: str = "medium"
     judge_effort: str = "low"
     # Solo provider "openai": manda *_effort al server come `reasoning_effort` (none, low,
-    # medium, high). Utile con i modelli locali che "pensano": meno ragionamento, più velocità.
+    # medium, high). Con i modelli locali che "pensano": meno ragionamento, più velocità.
     send_reasoning_effort: bool = False
-    refusal_fallbacks: bool = True
+    refusal_fallbacks: bool = True  # solo Claude: un rifiuto dei classificatori viene rilanciato lato server
     timeout: float = 600.0
 
 
@@ -80,19 +47,19 @@ class LLMConfig:
 class IndexConfig:
     concurrency: int = 8
     fanout: int = 8
-    chunk_chars: int = 24000
-    watch_seconds: float = 20.0
+    chunk_chars: int = 24000     # i documenti più lunghi vengono letti a pezzi, in parallelo
+    watch_seconds: float = 20.0  # ogni quanto il server ricontrolla la cartella dei documenti
 
 
 @dataclass
 class VerifyConfig:
     enabled: bool = True
-    # "auto": decision model NLI se installato, altrimenti il modello linguistico;
+    # "auto": decision model NLI se installato, poi il modello linguistico sui casi dubbi;
     # "nli": solo NLI; "llm": solo modello linguistico (logprob se il server li espone)
     judge: str = "auto"
     threshold: float = 0.6
-    context_lines: int = 20
-    max_passage_lines: int = 150
+    context_lines: int = 20       # righe attorno alla citazione mostrate al ricontrollo
+    max_passage_lines: int = 150  # una citazione più lunga viene tagliata
 
 
 @dataclass
@@ -109,7 +76,7 @@ class ServerConfig:
     # true: chi si collega dal computer stesso non ha bisogno di token e può amministrare.
     # Va messo a false se davanti al server c'è un reverse proxy sulla stessa macchina.
     trust_loopback: bool = True
-    users: dict[str, str] = field(default_factory=dict)
+    users: dict[str, str] = field(default_factory=dict)  # nome -> token personale
 
 
 @dataclass
@@ -126,12 +93,32 @@ class Config:
 
     @classmethod
     def load(cls, path: str | os.PathLike | None = None) -> Config:
-        cfg_path = Path(path or os.environ.get("LLMWIKI_CONFIG") or "wiki.toml").resolve()
-        data: dict = {}
-        if cfg_path.exists():
-            # utf-8-sig: Blocco note e PowerShell salvano spesso con il BOM in testa
-            data = tomllib.loads(cfg_path.read_text(encoding="utf-8-sig"))
-        return cls.from_dict(data, cfg_path.parent, cfg_path if cfg_path.exists() else None)
+        cfg_path = Path(path or "wiki.toml").resolve()
+        if not cfg_path.exists():
+            return cls.from_dict({}, cfg_path.parent)
+        # utf-8-sig: Blocco note e PowerShell salvano spesso con il BOM in testa
+        data = tomllib.loads(cfg_path.read_text(encoding="utf-8-sig"))
+        return cls.from_dict(data, cfg_path.parent, cfg_path)
+
+    @classmethod
+    def from_dict(cls, data: dict, root: Path, path: Path | None = None) -> Config:
+        paths = data.get("paths", {})
+        cfg = cls(
+            root=root,
+            docs_dir=(root / paths.get("docs", "data/docs")).resolve(),
+            wiki_dir=(root / paths.get("wiki", "data/wiki")).resolve(),
+            path=path,
+        )
+        for section in SECTIONS:
+            target = getattr(cfg, section)
+            known = {f.name for f in fields(target)}
+            for key, value in data.get(section, {}).items():
+                if key in known:
+                    setattr(target, key, value)
+                else:  # scritta da una versione più recente, o un refuso: si ignora, non si blocca
+                    logging.getLogger("llmwiki.config").warning(
+                        "wiki.toml: impostazione sconosciuta [%s].%s ignorata", section, key)
+        return cfg
 
     def to_toml(self) -> str:
         def value(v) -> str:
@@ -148,42 +135,20 @@ class Config:
                 return target.as_posix()
 
         lines = ["# Impostazioni di questo spazio. Si modificano dall'app (scheda Impostazioni)",
-                 "# oppure a mano: i percorsi sono relativi a questo file.", "",
+                 "# oppure a mano; i percorsi sono relativi a questo file.", "",
                  "[paths]", f"docs = {value(relative(self.docs_dir))}",
                  f"wiki = {value(relative(self.wiki_dir))}"]
-        for section in ("llm", "index", "verify", "agent", "server"):
-            lines += ["", f"[{section}]"]
+        for section in SECTIONS:
             target = getattr(self, section)
+            lines += ["", f"# {NOTES[section]}", f"[{section}]"]
             lines += [f"{f.name} = {value(getattr(target, f.name))}"
                       for f in fields(target) if f.name != "users"]
-        lines += ["", "[server.users]"]
+        lines += ["", "# Un token per persona: nome = \"token\"", "[server.users]"]
         lines += [f"{json.dumps(name)} = {value(token)}" for name, token in self.server.users.items()]
         return "\n".join(lines) + "\n"
 
     def save(self) -> None:
-        if self.path is None:
-            self.path = self.root / "wiki.toml"
+        self.path = self.path or self.root / "wiki.toml"
         tmp = self.path.with_name(self.path.name + ".tmp")
         tmp.write_text(self.to_toml(), encoding="utf-8")
         os.replace(tmp, self.path)
-
-    @classmethod
-    def from_dict(cls, data: dict, root: Path, path: Path | None = None) -> Config:
-        paths = data.get("paths", {})
-        cfg = cls(
-            root=root,
-            docs_dir=(root / paths.get("docs", "data/docs")).resolve(),
-            wiki_dir=(root / paths.get("wiki", "data/wiki")).resolve(),
-            path=path,
-        )
-        for section in ("llm", "index", "verify", "agent", "server"):
-            target = getattr(cfg, section)
-            known = {f.name for f in fields(target)}
-            for key, value in data.get(section, {}).items():
-                if key not in known:
-                    # scritta da una versione più recente (o un refuso): si ignora, non si blocca
-                    logging.getLogger("llmwiki.config").warning(
-                        "wiki.toml: impostazione sconosciuta [%s].%s ignorata", section, key)
-                    continue
-                setattr(target, key, value)
-        return cfg

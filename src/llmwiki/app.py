@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import secrets
 
 from . import apphome, nli
 from .agent import Answer, WikiAgent
@@ -30,9 +32,11 @@ class Wiki:
         self.llm = llm or make_llm(cfg.llm)
         self.tools = WikiTools(self.store)
         self.indexer = Indexer(cfg, self.store, self.llm)
-        if judge is None and cfg.verify.judge != "llm" and nli.installed():
+        if cfg.verify.judge == "llm":
+            judge = None
+        elif judge is None and nli.installed():
             judge = nli.NliJudge()
-        self.agent = WikiAgent(cfg, self.tools, self.llm, judge if cfg.verify.judge != "llm" else None)
+        self.agent = WikiAgent(cfg, self.tools, self.llm, judge)
 
     async def ask(self, question: str, folder: str = "", *, history: list[dict] | None = None,
                   on_event=None, user: str = "") -> Answer:
@@ -82,6 +86,48 @@ def save_secret(name: str, value: str) -> None:
         stored.pop(name, None)
         os.environ.pop(name, None)
     path.write_text(json.dumps(stored), encoding="utf-8")
+
+
+def add_user(cfg: Config, name: str) -> str:
+    """Crea un utente e restituisce il suo token personale (salvato in wiki.toml)."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+        raise ValueError("nome utente: lettere, cifre, _ e - (massimo 40)")
+    if name in cfg.server.users:
+        raise ValueError(f"l'utente {name!r} esiste già")
+    token = secrets.token_urlsafe(24)
+    cfg.server.users[name] = token
+    cfg.save()
+    return token
+
+
+# Server locali che l'app sa riconoscere da sola (tutti con API compatibile OpenAI).
+LOCAL_SERVERS = (("Strata / llama.cpp", 8080), ("Ollama", 11434), ("LM Studio", 1234), ("vLLM", 8000))
+
+
+async def detect_local_servers() -> list[dict]:
+    """Modelli accesi su questo computer: [{name, base_url, models}]."""
+    import httpx
+
+    async def probe(name: str, port: int) -> dict | None:
+        base = f"http://127.0.0.1:{port}/v1"
+        try:
+            async with httpx.AsyncClient(timeout=1.5) as http:
+                data = (await http.get(base + "/models")).json()
+            models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+        except Exception:  # porta chiusa, o un servizio che non è un server di modelli
+            return None
+        return {"name": name, "base_url": base, "models": models} if models else None
+
+    found = await asyncio.gather(*(probe(name, port) for name, port in LOCAL_SERVERS))
+    return [server for server in found if server]
+
+
+def use_local_server(cfg: Config, server: dict) -> None:
+    """Collega la configurazione a un server trovato da `detect_local_servers`."""
+    model = server["models"][0]
+    cfg.llm.provider, cfg.llm.base_url = "openai", server["base_url"]
+    cfg.llm.agent_model = cfg.llm.summary_model = cfg.llm.judge_model = model
+    cfg.index.concurrency = 2  # i server locali di solito elaborano una richiesta alla volta
 
 
 class Hub:

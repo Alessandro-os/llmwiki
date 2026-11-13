@@ -20,7 +20,16 @@ from .config import LLMConfig
 
 
 class LLMError(Exception):
-    pass
+    """Errore del modello. `status` è il codice HTTP quando il server ha risposto con un
+    rifiuto: distingue "questa richiesta non va" da "il server non c'è"."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def rejected(self) -> bool:
+        return self.status is not None and 400 <= self.status < 500
 
 
 @dataclass
@@ -217,17 +226,14 @@ class _AnthropicConversation(Conversation):
         kwargs: dict = {}
         if self.effort:
             kwargs["output_config"] = {"effort": self.effort}
-        while True:
-            response = await self.llm._create(
-                model=self.model, kind="agent", max_tokens=16000, system=self.system,
-                tools=self.tools, messages=self.messages,
-                cache_control={"type": "ephemeral"},  # il prefisso della conversazione si riusa a ogni passo
-                **kwargs,
-            )
-            # Il contenuto torna indietro intero: i blocchi di thinking vanno riproposti invariati.
-            self.messages.append({"role": "assistant", "content": response.content})
-            if response.stop_reason != "pause_turn":
-                break
+        response = await self.llm._create(
+            model=self.model, kind="agent", max_tokens=16000, system=self.system,
+            tools=self.tools, messages=self.messages,
+            cache_control={"type": "ephemeral"},  # il prefisso della conversazione si riusa a ogni passo
+            **kwargs,
+        )
+        # Il contenuto torna indietro intero: i blocchi di thinking vanno riproposti invariati.
+        self.messages.append({"role": "assistant", "content": response.content})
         if response.stop_reason == "max_tokens":
             raise LLMError("risposta dell'agente troncata (max_tokens)")
         calls = [
@@ -271,8 +277,9 @@ class OpenAICompatLLM(LLM):
             else:
                 if response.status_code == 200:
                     return response.json()
-                last = LLMError(f"errore {response.status_code} dal modello: {response.text[:300]}")
-                if response.status_code not in (408, 409, 429) and response.status_code < 500:
+                last = LLMError(f"errore {response.status_code} dal modello: {response.text[:300]}",
+                                response.status_code)
+                if last.rejected and response.status_code not in (408, 409, 429):
                     raise last
             await asyncio.sleep(min(2 ** attempt, 20))
         raise last  # type: ignore[misc]
@@ -307,7 +314,9 @@ class OpenAICompatLLM(LLM):
         }
         try:
             data = await self._chat(body, kind)
-        except LLMError:
+        except LLMError as exc:
+            if not exc.rejected:
+                raise  # server spento o in errore: ripetere la richiesta non serve
             # server che non conosce response_format: schema nel prompt
             return await super().complete_json(model=model, system=system, prompt=prompt,
                                                schema=schema, effort=effort, kind=kind)
@@ -344,7 +353,9 @@ class OpenAICompatLLM(LLM):
             }
             try:
                 confidence = self._yes_probability(await self._chat(body, "judge"))
-            except LLMError:
+            except LLMError as exc:
+                if not exc.rejected:
+                    raise  # server irraggiungibile: non significa che i logprob non ci siano
                 confidence = None
             if confidence is not None:
                 self._judge_mode = mode
@@ -492,7 +503,7 @@ def make_llm(cfg: LLMConfig) -> LLM:
     provider = cfg.provider.lower()
     if provider == "anthropic":
         return AnthropicLLM(cfg)
-    if provider in ("openai", "openai-compatible", "ollama"):
+    if provider == "openai":
         return OpenAICompatLLM(cfg)
     if provider == "mock":
         return MockLLM(cfg)

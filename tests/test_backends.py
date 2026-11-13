@@ -85,6 +85,41 @@ def test_openai_judge_falls_back_without_logprobs():
     asyncio.run(scenario())
 
 
+def test_server_down_is_not_mistaken_for_missing_logprobs(monkeypatch):
+    import pytest
+
+    from llmwiki import llm as llm_module
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(llm_module.asyncio, "sleep", no_wait)
+    state = {"down": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if state["down"]:
+            return httpx.Response(503, text="modello in caricamento")
+        return httpx.Response(200, json={"choices": [{
+            "message": {"content": "YES"},
+            "logprobs": {"content": [{"token": "YES", "top_logprobs": [{"token": "YES", "logprob": 0.0}]}]},
+        }]})
+
+    async def scenario():
+        llm = OpenAICompatLLM(LLMConfig(provider="openai", base_url="http://modello.test/v1"))
+        await llm.http.aclose()
+        llm.http = httpx.AsyncClient(base_url="http://modello.test/v1",
+                                     transport=httpx.MockTransport(handler))
+        with pytest.raises(llm_module.LLMError) as error:
+            await llm.judge(model="m", claim="c", passage="p")
+        assert error.value.status == 503 and not error.value.rejected
+        state["down"] = False  # il server torna: i logprob si usano ancora
+        confidence, method = await llm.judge(model="m", claim="c", passage="p")
+        assert method == "logprobs" and confidence == 1.0
+        await llm.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_anthropic_backend(monkeypatch):
     import anthropic
     import httpx2

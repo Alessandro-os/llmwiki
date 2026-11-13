@@ -23,6 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(HERE))
 
 from llmwiki import nli  # noqa: E402
 from llmwiki.app import Wiki, load_secrets  # noqa: E402
@@ -93,14 +94,19 @@ def _matches(text: str, needle: str) -> bool:
 def cmd_answers(args) -> int:
     load_secrets()
     source = Config.load(args.config)
-    work = HERE / ".work"
+    work = HERE / (".work" if args.suite == "esempi" else ".work_difficile")
     docs = work / "documenti"
     if args.fresh and work.exists():
         shutil.rmtree(work)
-    shutil.copytree(ROOT / "examples" / "docs", docs, dirs_exist_ok=True)
+    if args.suite == "esempi":
+        shutil.copytree(ROOT / "examples" / "docs", docs, dirs_exist_ok=True)
+        questions = json.loads((HERE / "questions.json").read_text(encoding="utf-8"))["questions"]
+    else:  # documenti quasi identici tra loro, generati con risposte note: vedi corpus.py
+        import corpus
+
+        questions = corpus.build(docs)
     cfg = Config.from_dict({"paths": {"docs": "documenti", "wiki": ".indice"}}, work)
     cfg.llm, cfg.index, cfg.verify, cfg.agent = source.llm, source.index, source.verify, source.agent
-    questions = json.loads((HERE / "questions.json").read_text(encoding="utf-8"))["questions"]
     if args.limit:
         questions = questions[: args.limit]
 
@@ -215,6 +221,8 @@ def main() -> int:
     p_judge.add_argument("--threshold", type=float, default=0.6)
     p_answers = sub.add_parser("answers")
     p_answers.add_argument("--config", required=True)
+    p_answers.add_argument("--suite", choices=["esempi", "difficile"], default="esempi",
+                           help="esempi: i 10 documenti di examples/docs; difficile: 64 documenti molto simili tra loro")
     p_answers.add_argument("--limit", type=int, default=0)
     p_answers.add_argument("--fresh", action="store_true", help="ricostruisce l'indice da zero")
     p_scale = sub.add_parser("scale")

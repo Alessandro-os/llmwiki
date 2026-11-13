@@ -1,4 +1,4 @@
-"""Riga di comando: llmwiki init | index | ask | serve | mcp | status | user add."""
+"""Riga di comando: init, index, ask, serve, mcp, status, user add, model, app."""
 
 from __future__ import annotations
 
@@ -6,20 +6,18 @@ import argparse
 import asyncio
 import json
 import logging
-import re
-import secrets
 import sys
 from pathlib import Path
 
-from .config import DEFAULT_TOML, Config
-
-LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+from . import nli
+from .app import Hub, Wiki, add_user, detect_local_servers, load_secrets, use_local_server
+from .config import LOOPBACK, Config
+from .store import Store
 
 
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(prog="llmwiki", description="LLM wiki ad albero di riassunti")
     parser.add_argument("--config", "-c", help="percorso di wiki.toml (default: ./wiki.toml)")
@@ -28,46 +26,33 @@ def main(argv: list[str] | None = None) -> int:
 
     p_init = sub.add_parser("init", help="crea wiki.toml e le cartelle dei dati")
     p_init.add_argument("--provider", choices=["anthropic", "openai", "mock"], default="anthropic")
-
     sub.add_parser("index", help="indicizza i documenti nuovi o modificati e aggiorna l'albero")
     sub.add_parser("status", help="stato dell'indice")
-
     p_ask = sub.add_parser("ask", help="fa una domanda alla wiki")
     p_ask.add_argument("question")
     p_ask.add_argument("--folder", default="", help="cartella da cui partire")
     p_ask.add_argument("--json", action="store_true", help="risposta completa in JSON")
-
     p_serve = sub.add_parser("serve", help="avvia il server condiviso (web, API e MCP su /mcp)")
     p_serve.add_argument("--host")
     p_serve.add_argument("--port", type=int)
-
     sub.add_parser("mcp", help="server MCP su stdio (per client che lanciano un processo locale)")
-
     sub.add_parser("app", help="avvia l'app desktop (spazi, finestra, icona nell'area di notifica)")
-
     p_model = sub.add_parser("model", help="decision model per la verifica delle citazioni")
-    model_sub = p_model.add_subparsers(dest="model_command", required=True)
-    model_sub.add_parser("install", help="scarica il decision model")
-    model_sub.add_parser("status", help="mostra se è installato")
-
+    p_model.add_argument("action", choices=["install", "status"])
     p_user = sub.add_parser("user", help="gestione utenti del server")
-    user_sub = p_user.add_subparsers(dest="user_command", required=True)
-    p_add = user_sub.add_parser("add", help="crea un token per un utente")
-    p_add.add_argument("name")
+    p_user.add_argument("action", choices=["add"])
+    p_user.add_argument("name")
 
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s", stream=sys.stderr,
     )
-
-    from .app import load_secrets
-
     load_secrets()
     if args.command == "init":
         return _init(args)
     if args.command == "model":
-        return _model(None, args)
+        return _model(args)
     if args.command == "app":
         from .desktop import main as desktop_main
 
@@ -76,11 +61,13 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.path is None:
         print("wiki.toml non trovato: esegui prima `llmwiki init`.", file=sys.stderr)
         return 2
+    commands = {"index": _index, "status": _status, "ask": _ask, "serve": _serve, "mcp": _mcp,
+                "user": _user}
     try:
-        return {
-            "index": _index, "status": _status, "ask": _ask, "serve": _serve, "mcp": _mcp,
-            "user": _user,
-        }[args.command](cfg, args)
+        return commands[args.command](cfg, args)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     except KeyboardInterrupt:
         return 130
 
@@ -90,15 +77,17 @@ def _init(args) -> int:
     if path.exists():
         print(f"{path} esiste già: non lo tocco.")
     else:
-        text = DEFAULT_TOML
-        if args.provider == "mock":
-            text = text.replace('provider = "anthropic"', 'provider = "mock"')
-        elif args.provider == "openai":
-            text = text.replace('provider = "anthropic"', 'provider = "openai"')
-            for key in ("base_url", "api_key_env", "agent_model", "summary_model", "judge_model"):
-                text = text.replace(f"# {key} = ", f"{key} = ")
-            text = re.sub(r'^(agent|summary|judge)_model = "claude[^\n]*\n', "", text, flags=re.M)
-        path.write_text(text, encoding="utf-8")
+        cfg = Config.from_dict({"llm": {"provider": args.provider}}, path.parent, path)
+        if args.provider == "openai":
+            servers = asyncio.run(detect_local_servers())
+            if servers:
+                use_local_server(cfg, servers[0])
+                print(f"Collegato a {servers[0]['name']}: {cfg.llm.agent_model}")
+            else:
+                cfg.llm.agent_model = cfg.llm.summary_model = cfg.llm.judge_model = ""
+                print("Nessun server di modelli acceso su questo computer: imposta base_url e i "
+                      "tre modelli in wiki.toml.")
+        cfg.save()
         print(f"Creato {path}")
     cfg = Config.load(path)
     cfg.docs_dir.mkdir(parents=True, exist_ok=True)
@@ -108,15 +97,17 @@ def _init(args) -> int:
     return 0
 
 
-def _wiki(cfg: Config):
-    from .app import Wiki
-
-    return Wiki(cfg)
+def _print_errors(cfg: Config) -> None:
+    store = Store(cfg.docs_dir, cfg.wiki_dir)
+    for row in store.all_docs():
+        if row["status"] == "error":
+            print(f"  ! {row['path']}: {row['error']}")
+    store.close()
 
 
 def _index(cfg: Config, _args) -> int:
     async def run() -> dict:
-        wiki = _wiki(cfg)
+        wiki = Wiki(cfg)
         try:
             return await wiki.indexer.run_once()
         finally:
@@ -127,43 +118,28 @@ def _index(cfg: Config, _args) -> int:
           f"{status['nodes']} · errori: {status['error']}")
     print(f"Chiamate al modello: {status['llm_calls'] or 'nessuna (tutto già aggiornato)'}")
     if status["error"]:
-        from .store import Store
-
-        store = Store(cfg.docs_dir, cfg.wiki_dir)
-        for row in store.all_docs():
-            if row["status"] == "error":
-                print(f"  ! {row['path']}: {row['error']}")
-        store.close()
-        return 1
-    return 0
+        _print_errors(cfg)
+    return 1 if status["error"] else 0
 
 
 def _status(cfg: Config, _args) -> int:
-    from .store import Store
-
     store = Store(cfg.docs_dir, cfg.wiki_dir)
-    counts = store.counts()
-    print(json.dumps(counts, ensure_ascii=False, indent=2))
-    for row in store.all_docs():
-        if row["status"] == "error":
-            print(f"! {row['path']}: {row['error']}")
+    print(json.dumps(store.counts(), ensure_ascii=False, indent=2))
     store.close()
+    _print_errors(cfg)
     return 0
 
 
 def _ask(cfg: Config, args) -> int:
     async def run():
-        wiki = _wiki(cfg)
+        wiki = Wiki(cfg)
         try:
             return await wiki.ask(args.question, args.folder)
         finally:
             await wiki.aclose()
 
     answer = asyncio.run(run())
-    if args.json:
-        print(json.dumps(answer.to_dict(), ensure_ascii=False, indent=2))
-    else:
-        print(answer.render())
+    print(json.dumps(answer.to_dict(), ensure_ascii=False, indent=2) if args.json else answer.render())
     return 0
 
 
@@ -172,36 +148,28 @@ def _serve(cfg: Config, args) -> int:
 
     from .server import create_app
 
-    if args.host:
-        cfg.server.host = args.host
-    if args.port:
-        cfg.server.port = args.port
+    cfg.server.host = args.host or cfg.server.host
+    cfg.server.port = args.port or cfg.server.port
     if cfg.server.host not in LOOPBACK and not cfg.server.users:
-        print(
-            f"Rifiuto di ascoltare su {cfg.server.host} senza utenti: chiunque in rete potrebbe "
-            "leggere i documenti.\nCrea almeno un token con `llmwiki user add <nome>`.",
-            file=sys.stderr,
-        )
+        print(f"Rifiuto di ascoltare su {cfg.server.host} senza utenti: chiunque in rete potrebbe "
+              "leggere i documenti.\nCrea almeno un token con `llmwiki user add <nome>`.",
+              file=sys.stderr)
         return 2
-    app = create_app(_wiki(cfg))
     print(f"llmwiki su http://{cfg.server.host}:{cfg.server.port}  (MCP: /mcp)")
-    uvicorn.run(app, host=cfg.server.host, port=cfg.server.port, log_level="warning")
+    uvicorn.run(create_app(Wiki(cfg)), host=cfg.server.host, port=cfg.server.port, log_level="warning")
     return 0
 
 
 def _mcp(cfg: Config, _args) -> int:
-    from .app import Hub
     from .mcp_server import build_mcp
 
-    build_mcp(Hub(_wiki(cfg))).run("stdio")
+    build_mcp(Hub(Wiki(cfg))).run("stdio")
     return 0
 
 
-def _model(_cfg, args) -> int:
-    from . import nli
-
+def _model(args) -> int:
     download = nli.Download()
-    if args.model_command == "status":
+    if args.action == "status":
         print(json.dumps(download.status(), ensure_ascii=False, indent=2))
         return 0
     if nli.installed():
@@ -217,23 +185,9 @@ def _model(_cfg, args) -> int:
 
 
 def _user(cfg: Config, args) -> int:
-    name = args.name
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-        print("Nome utente: solo lettere, cifre, _ e -.", file=sys.stderr)
-        return 2
-    if name in cfg.server.users:
-        print(f"L'utente {name!r} esiste già.", file=sys.stderr)
-        return 2
-    token = secrets.token_urlsafe(24)
-    line = f'{name} = "{token}"'
-    text = cfg.path.read_text(encoding="utf-8-sig")
-    tables = re.findall(r"^\[([^\]]+)\]\s*$", text, flags=re.M)
-    if tables and tables[-1] == "server.users":
-        cfg.path.write_text(text.rstrip("\n") + "\n" + line + "\n", encoding="utf-8")
-        print(f"Utente {name!r} aggiunto a {cfg.path}. Riavvia il server per applicarlo.")
-    else:
-        print(f"Aggiungi questa riga sotto [server.users] in {cfg.path}:\n  {line}")
-    print(f"Token (da dare a {name}, non verrà mostrato di nuovo):\n  {token}")
+    token = add_user(cfg, args.name)
+    print(f"Utente {args.name!r} aggiunto a {cfg.path}. Riavvia il server per applicarlo.")
+    print(f"Token (da dare a {args.name}, non verrà mostrato di nuovo):\n  {token}")
     return 0
 
 

@@ -339,10 +339,10 @@ function renderSettings() {
 
     '<div class="label">Condivisione con altre persone</div><div class="card">' +
     '<div class="meta">Ogni persona riceve un token personale. Da questo computer non serve.</div>' +
-    (s.server.users.length ? s.server.users.map((u) => '<div class="row"><span>' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : '<div class="meta">Nessun utente.</div>') +
+    (s.users.length ? s.users.map((u) => '<div class="row"><span>' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : '<div class="meta">Nessun utente.</div>') +
     (shownToken ? '<div class="field"><label>Token di ' + esc(shownToken.name) + " (copialo ora: non verrà mostrato di nuovo)</label><div class=\"token\">" + esc(shownToken.token) + "</div></div>" : "") +
     '<div class="row"><input type="text" id="newUser" placeholder="Nome, es. anna"><button data-act="add-user">Aggiungi utente</button></div>' +
-    '<div class="row"><label><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.server.users.length ? "" : " disabled") + "> Raggiungibile dagli altri computer della rete</label></div>" +
+    '<div class="row"><label><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.users.length ? "" : " disabled") + "> Raggiungibile dagli altri computer della rete</label></div>" +
     '<div class="meta">Indirizzo per i colleghi: http://NOME-DI-QUESTO-PC:' + s.server.port + " · MCP: http://NOME-DI-QUESTO-PC:" + s.server.port + "/mcp · Il cambio di rete vale dal prossimo avvio.</div>" +
     '<div class="row"><button class="primary" data-act="save-share">Salva</button><span id="shareMsg" class="meta"></span></div></div>' +
 

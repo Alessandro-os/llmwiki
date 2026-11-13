@@ -19,12 +19,14 @@ import time
 import webbrowser
 from pathlib import Path
 
+import uvicorn
+
 from . import __version__, apphome
-from .app import Hub, Wiki, load_secrets
-from .config import Config
+from .app import Hub, Wiki, detect_local_servers, load_secrets, use_local_server
+from .config import LOOPBACK, Config
+from .server import create_app
 
 log = logging.getLogger("llmwiki.desktop")
-LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
 def make_icon(size: int = 64):
@@ -158,30 +160,62 @@ def open_window(url: str) -> None:
 
 
 def _first_run(registry: apphome.Registry) -> None:
-    """Primo avvio: uno spazio pronto all'uso, collegato al modello locale se ce n'è uno."""
-    from .server import detect_local_servers
-
+    """Primo avvio: uno spazio pronto all'uso, collegato al modello locale se ce n'è uno
+    acceso; altrimenti in modalità demo, finché non si sceglie un modello dalle Impostazioni."""
     template = Config.from_dict({"llm": {"provider": "mock"}}, apphome.home())
-    try:
-        found = asyncio.run(detect_local_servers())
-    except Exception:
-        found = []
-    if found:
-        server = found[0]
-        template.llm.provider = "openai"
-        template.llm.base_url = server["base_url"]
-        template.llm.agent_model = template.llm.summary_model = template.llm.judge_model = server["models"][0]
-        template.index.concurrency = 2
-        log.info("primo avvio: collegato a %s (%s)", server["name"], server["models"][0])
+    servers = asyncio.run(detect_local_servers())
+    if servers:
+        use_local_server(template, servers[0])
+        log.info("primo avvio: collegato a %s (%s)", servers[0]["name"], template.llm.agent_model)
     registry.add("Personale", template=template)
+
+
+def _open_hub(registry: apphome.Registry) -> tuple[Hub, dict]:
+    """Apre lo spazio attivo. Se la sua cartella è stata spostata o cancellata ripiega sul
+    primo spazio che si apre, invece di lasciare l'utente senza applicazione."""
+    active = registry.active()
+    problems = []
+    for space in [active, *(s for s in registry.spaces if s is not active)]:
+        config_file = Path(space["path"]) / "wiki.toml"
+        try:
+            if not config_file.is_file():
+                raise FileNotFoundError(f"manca {config_file}")
+            hub = Hub(Wiki(Config.load(config_file)), registry)
+        except Exception as exc:
+            log.warning("spazio %s non apribile: %s", space["path"], exc)
+            problems.append(f"«{space['name']}» ({space['path']}): {exc}")
+            continue
+        if space is not active:
+            registry.set_active(space["id"])
+        return hub, space
+    raise RuntimeError("nessuno spazio si apre:\n" + "\n".join(problems))
+
+
+def _run_tray(url: str, hub: Hub, quit_app, stop: threading.Event) -> bool:
+    """Icona nell'area di notifica; resta qui finché l'app non viene chiusa.
+    Ritorna False se l'icona non si può creare (in quel caso l'app resta comunque accesa)."""
+    try:
+        import pystray
+
+        icon = pystray.Icon("LLMWiki", make_icon(64), "LLMWiki", pystray.Menu(
+            pystray.MenuItem("Apri LLMWiki", lambda *_: open_window(url), default=True),
+            pystray.MenuItem("Apri la cartella dei documenti",
+                             lambda *_: os.startfile(hub.wiki.cfg.docs_dir)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Esci", lambda *_: quit_app()),
+        ))
+    except Exception:
+        log.exception("icona nell'area di notifica non disponibile")
+        return False
+    threading.Thread(target=lambda: (stop.wait(), icon.stop()), daemon=True).start()
+    icon.run()
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
     """Un'app senza console non può fallire in silenzio: l'errore va mostrato."""
     try:
         return _main(argv)
-    except SystemExit:
-        raise
     except Exception as exc:
         log.exception("avvio non riuscito")
         message = (f"LLMWiki non è riuscito ad avviarsi:\n\n{exc}\n\n"
@@ -213,40 +247,18 @@ def _main(argv: list[str] | None = None) -> int:
 
     if not registry.spaces:
         _first_run(registry)
-    # Si apre lo spazio attivo; se la sua cartella è stata spostata o cancellata si ripiega
-    # sul primo spazio che si apre, invece di lasciare l'utente senza applicazione.
-    active = registry.active()
-    hub, problems = None, []
-    for space in [active, *(s for s in registry.spaces if s is not active)]:
-        config_file = Path(space["path"]) / "wiki.toml"
-        try:
-            if not config_file.is_file():
-                raise FileNotFoundError(f"manca {config_file}")
-            hub = Hub(Wiki(Config.load(config_file)), registry)
-        except Exception as exc:
-            log.warning("spazio %s non apribile: %s", space["path"], exc)
-            problems.append(f"«{space['name']}» ({space['path']}): {exc}")
-            continue
-        if space is not active:
-            registry.set_active(space["id"])
-        break
-    if hub is None:
-        raise RuntimeError("nessuno spazio si apre:\n" + "\n".join(problems))
+    hub, space = _open_hub(registry)
     cfg = hub.wiki.cfg
     port = _free_port(port)
     if not args.port and registry.data.get("port") != port:
         registry.data["port"] = port
         registry.save()
+    # In rete solo se esiste almeno un utente: altrimenti chiunque potrebbe leggere i documenti.
     host = cfg.server.host if (cfg.server.host in LOOPBACK or cfg.server.users) else "127.0.0.1"
     cfg.server.host, cfg.server.port = host, port
 
-    import uvicorn
-
-    from .server import create_app
-
-    app = create_app(hub)
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_config=None,
-                                           access_log=False))  # niente riga di log a ogni richiesta
+    server = uvicorn.Server(uvicorn.Config(create_app(hub), host=host, port=port,
+                                           log_config=None, access_log=False))
     stop = threading.Event()
 
     def quit_app() -> None:
@@ -257,45 +269,22 @@ def _main(argv: list[str] | None = None) -> int:
     thread = threading.Thread(target=server.run, name="llmwiki-server", daemon=True)
     thread.start()
     deadline = time.time() + 40
-    while time.time() < deadline and not _alive(port) and thread.is_alive():
+    while time.time() < deadline and thread.is_alive() and not _alive(port):
         time.sleep(0.2)
     if not thread.is_alive():
-        log.error("il server non è partito")
-        return 1
+        raise RuntimeError("il server interno non è partito")
     url = f"http://127.0.0.1:{port}"
     log.info("LLMWiki %s su %s (spazio: %s)", __version__, url, space["name"])
     if not args.no_window:  # in un thread: l'attesa della finestra non ritarda l'icona
         threading.Thread(target=open_window, args=(url,), daemon=True).start()
 
-    tray = None
-    if not args.no_tray:
-        try:
-            import pystray
-
-            def on_quit(icon, _item):
-                quit_app()
-                icon.stop()
-
-            tray = pystray.Icon("LLMWiki", make_icon(64), "LLMWiki", pystray.Menu(
-                pystray.MenuItem("Apri LLMWiki", lambda *_: open_window(url), default=True),
-                pystray.MenuItem("Apri la cartella dei documenti",
-                                 lambda *_: os.startfile(hub.wiki.cfg.docs_dir)),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Esci", on_quit),
-            ))
-        except Exception:
-            log.exception("icona nell'area di notifica non disponibile")
-    if tray is not None:
-        threading.Thread(target=lambda: (stop.wait(), tray.stop()), daemon=True).start()
-        tray.run()  # resta qui finché non si sceglie Esci
-        quit_app()
-    else:
+    if args.no_tray or not _run_tray(url, hub, quit_app, stop):
         try:
             while thread.is_alive() and not stop.is_set():
                 time.sleep(0.5)
         except KeyboardInterrupt:
             pass
-        quit_app()
+    quit_app()
     thread.join(timeout=15)
     return 0
 
