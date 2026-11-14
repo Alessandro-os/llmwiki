@@ -2,6 +2,10 @@
 
 [← Indice](README.md)
 
+Questa pagina dice com'è fatto il codice e come si prova. Il metodo di lavoro (principi,
+ciclo, qualità, resoconto) sta in [AGENTS.md](../AGENTS.md), che leggono anche Claude Code,
+opencode e pi.
+
 ## 9.1 Mappa del codice
 
 Tutto in `src/llmwiki/`. Le frecce dicono chi usa chi; nessun modulo in basso conosce quelli
