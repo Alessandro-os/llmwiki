@@ -4,7 +4,7 @@
     {
       "name": "llmwiki-demo",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "llmwiki", "-c", "examples/wiki.demo.toml", "serve", "--port", "8775"],
+      "runtimeArgs": ["run", "llmwiki", "-c", "examples/wiki.demo.toml", "serve"],
       "port": 8775
     }
   ]
