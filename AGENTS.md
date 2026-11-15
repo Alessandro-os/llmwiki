@@ -121,5 +121,4 @@ raccomandazione.
 - Installare programmi (winget e simili): lo chiedi all'utente e gli dai il comando.
 - Un blocco di sicurezza (per esempio la cancellazione nella radice di `C:`) non si aggira:
   si spiega e si lascia fare all'utente.
-- I modelli stanno in `C:\AI-Workspace\modelli` (vedi il suo `LEGGIMI.txt`): niente file di
-  modelli sparsi altrove.
+- I modelli stanno in `C:\AI-Workspace\modelli`: niente file di modelli sparsi altrove.
