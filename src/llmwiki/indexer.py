@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 
 from . import prompts
 from .config import Config
@@ -43,6 +44,24 @@ class Item:
         return {"kind": self.kind, "ref": self.ref, "title": self.title}
 
 
+@dataclass
+class Progress:
+    """Avanzamento di un documento in lettura. È indicativo: i passi previsti sono l'estrazione
+    più le chiamate al modello note in quel momento (per un documento lungo si conoscono solo
+    dopo averlo diviso in parti, e le condensazioni si aggiungono quando servono)."""
+
+    model: str
+    started: float = field(default_factory=time.monotonic)
+    done: int = 0
+    total: int = 2  # estrazione + una chiamata, finché non si sa di più
+
+    def percent(self) -> int:
+        return min(99, round(100 * self.done / max(1, self.total)))
+
+    def seconds(self) -> float:
+        return time.monotonic() - self.started
+
+
 def title_of(markdown: str, fallback: str) -> str:
     for line in markdown.splitlines():
         if line.startswith("#"):
@@ -64,7 +83,15 @@ class Indexer:
         self.last_error = ""
         self.waiting = ""       # perché l'indicizzazione è ferma in attesa del modello
         self._resume_at = 0.0   # prima di questo istante non si avviano nuove schede
+        self.paused = False     # fermata dall'utente: non parte nulla finché non riprende
+        self.reading: dict[str, Progress] = {}
+        self.last_done: dict = {}
+        self._tree_task: asyncio.Task | None = None
         store.reset_stuck()
+
+    @property
+    def model_name(self) -> str:
+        return "demo" if self.cfg.llm.provider == "mock" else self.cfg.llm.summary_model
 
     # ---------------------------------------------------------------- ciclo di vita
 
@@ -95,6 +122,22 @@ class Indexer:
     def trigger(self) -> None:
         self._rescan.set()
 
+    async def pause(self) -> None:
+        """Ferma la lettura: le schede in corso si interrompono e i documenti tornano in coda,
+        così come l'aggiornamento dell'albero. Vale finché l'app resta aperta."""
+        self.paused = True
+        running = [*self._tasks.values()]
+        if self._tree_task and not self._tree_task.done():
+            running.append(self._tree_task)
+        for task in running:
+            task.cancel()
+        await asyncio.gather(*running, return_exceptions=True)
+
+    def resume(self) -> None:
+        self.paused = False
+        self._dirty.set()
+        self.trigger()
+
     async def _watch_loop(self) -> None:
         while True:
             try:
@@ -119,9 +162,16 @@ class Indexer:
                 await asyncio.sleep(1.0)
                 waited += 1.0
             await asyncio.sleep(1.0)
+            while self.paused:
+                await asyncio.sleep(1.0)
             self._dirty.clear()
+            self._tree_task = asyncio.create_task(self.build_tree())
             try:
-                await self.build_tree()
+                await self._tree_task
+            except asyncio.CancelledError:
+                if not self.paused or asyncio.current_task().cancelling():
+                    raise  # chiusura dell'app, non una pausa
+                self._dirty.set()  # fermato dall'utente: si rifà alla ripresa
             except LLMError as exc:
                 if not exc.unavailable:
                     log.exception("aggiornamento dell'albero fallito")
@@ -141,6 +191,13 @@ class Indexer:
         counts["last_error"] = self.last_error
         counts["waiting"] = self.waiting
         counts["llm_calls"] = dict(self.llm.calls)
+        counts["paused"] = self.paused
+        counts["reader"] = self.model_name  # chi legge i documenti ("model" è chi risponde)
+        counts["reading"] = [
+            {"path": path, "percent": p.percent(), "seconds": round(p.seconds()), "model": p.model}
+            for path, p in list(self.reading.items())
+        ]
+        counts["last_done"] = self.last_done
         return counts
 
     # ---------------------------------------------------------------- scansione
@@ -166,8 +223,8 @@ class Indexer:
             self.store.delete_doc(path)
         if removed:
             self._dirty.set()
-        if asyncio.get_running_loop().time() < self._resume_at:
-            return  # il modello non rispondeva: si aspetta prima di riprovare
+        if self.paused or asyncio.get_running_loop().time() < self._resume_at:
+            return  # fermata dall'utente, o il modello non rispondeva: si aspetta
         for row in self.store.all_docs():
             if row["status"] == "pending" and row["path"] not in self._tasks:
                 task = asyncio.create_task(self._index_doc(row["path"]))
@@ -199,7 +256,7 @@ class Indexer:
 
     # ---------------------------------------------------------------- scheda del documento
 
-    async def _call(self, system: str, prompt: str, kind: str) -> str:
+    async def _call(self, system: str, prompt: str, kind: str, doc: str = "") -> str:
         async with self._llm_slots:
             text = await self.llm.complete(
                 model=self.cfg.llm.summary_model, system=system, prompt=prompt,
@@ -207,34 +264,24 @@ class Indexer:
             )
         if not text.strip():
             raise LLMError("il modello ha restituito un testo vuoto")
+        self._step(doc)
         return text.strip()
+
+    def _step(self, doc: str, more: int = 0) -> None:
+        """Un passo fatto (o `more` passi in più previsti) nella lettura di `doc`."""
+        progress = self.reading.get(doc)
+        if progress:
+            progress.total += more
+            progress.done += 0 if more else 1
 
     async def _index_doc(self, path: str) -> None:
         async with self._doc_slots:
-            sha = self.store.get_doc(path)["sha"]
-            self.store.set_status(path, "indexing")
+            self.reading[path] = progress = Progress(self.model_name)
             try:
-                lines = await asyncio.to_thread(extract_lines, self.store.doc_file(path))
-                self.store.write_atomic(self.store.text_file(path), "\n".join(lines))
-                self.store.set_lines(path, len(lines))
-                # Da qui il documento è già cercabile e leggibile, anche senza scheda.
-                await asyncio.to_thread(self.store.index_text, path, lines)
-                body = await self._summarize(path, lines)
-                row = self.store.get_doc(path)
-                if row is None or row["sha"] != sha:
-                    # modificato o cancellato mentre il modello lo leggeva: questa scheda
-                    # descrive un testo che non c'è più
-                    if row is None:
-                        self.store.delete_doc(path)
-                    self._rescan.set()
-                    return
-                summary = f"<!-- documento: {path} · righe: {len(lines)} -->\n{body}\n"
-                self.store.write_atomic(self.store.summary_file(path), summary)
-                await asyncio.to_thread(self.store.index_summary, path, body)
-                self.store.set_ready(path, title_of(body, path), sha_text(summary))
-                self.waiting = ""
-                self._dirty.set()
+                await self._read_doc(path, progress)
             except asyncio.CancelledError:
+                # fermata dall'utente o chiusura dell'app: il documento torna in coda
+                self.store.set_status(path, "pending")
                 raise
             except LLMError as exc:
                 if exc.unavailable:
@@ -253,7 +300,35 @@ class Indexer:
             except Exception as exc:
                 log.exception("errore inatteso su %s", path)
                 self.store.set_status(path, "error", repr(exc), bump=True)
+            finally:
+                self.reading.pop(path, None)
 
+    async def _read_doc(self, path: str, progress: Progress) -> None:
+        sha = self.store.get_doc(path)["sha"]
+        self.store.set_status(path, "indexing")
+        lines = await asyncio.to_thread(extract_lines, self.store.doc_file(path))
+        self._step(path)
+        self.store.write_atomic(self.store.text_file(path), "\n".join(lines))
+        self.store.set_lines(path, len(lines))
+        # Da qui il documento è già cercabile e leggibile, anche senza scheda.
+        await asyncio.to_thread(self.store.index_text, path, lines)
+        body = await self._summarize(path, lines)
+        row = self.store.get_doc(path)
+        if row is None or row["sha"] != sha:
+            # modificato o cancellato mentre il modello lo leggeva: questa scheda
+            # descrive un testo che non c'è più
+            if row is None:
+                self.store.delete_doc(path)
+            self._rescan.set()
+            return
+        summary = f"<!-- documento: {path} · righe: {len(lines)} -->\n{body}\n"
+        self.store.write_atomic(self.store.summary_file(path), summary)
+        await asyncio.to_thread(self.store.index_summary, path, body)
+        seconds = progress.seconds()
+        self.store.set_ready(path, title_of(body, path), sha_text(summary), progress.model, seconds)
+        self.last_done = {"path": path, "seconds": round(seconds), "model": progress.model}
+        self.waiting = ""
+        self._dirty.set()
     async def _summarize(self, path: str, lines: list[str]) -> str:
         """Scrive la scheda. La quantità di testo per richiesta parte dall'impostazione, tiene
         conto della finestra del modello se è nota e, se il modello rifiuta comunque la
@@ -268,11 +343,14 @@ class Indexer:
                 if not exc.rejected or exc.status in (401, 403, 404) or limit <= 2000:
                     raise
                 limit = max(2000, limit // 2)
+                progress = self.reading.get(path)
+                if progress:  # si ricomincia a pezzi più piccoli: anche il conto riparte
+                    progress.done, progress.total = 1, 2
 
     async def _summarize_in(self, path: str, lines: list[str], limit: int) -> str:
         header = f"Documento: {path}\n\n"
         if sum(len(line) + 8 for line in lines) <= limit:
-            return await self._call(prompts.DOC_SUMMARY, header + numbered(lines), "doc")
+            return await self._call(prompts.DOC_SUMMARY, header + numbered(lines), "doc", path)
 
         # Documento lungo: appunti su ogni parte in parallelo, poi una scheda dagli appunti.
         chunks: list[tuple[int, list[str]]] = []
@@ -286,25 +364,27 @@ class Indexer:
         if current:
             chunks.append((start, current))
 
+        self._step(path, more=len(chunks))  # una chiamata per parte, più quella finale
         notes = await asyncio.gather(*(
             self._call(
                 prompts.CHUNK_NOTES,
                 f"Documento: {path} · parte {n + 1} di {len(chunks)} · righe "
                 f"{first + 1}-{first + len(part)}\n\n{numbered(part, first + 1)}",
-                "chunk",
+                "chunk", path,
             )
             for n, (first, part) in enumerate(chunks)
         ))
-        notes = await self._fit(list(notes), limit)
+        notes = await self._fit(list(notes), limit, path)
         joined = "\n\n".join(f"## Appunti parte {n + 1}\n{note}" for n, note in enumerate(notes))
-        return await self._call(prompts.DOC_FROM_NOTES, header + joined, "doc")
+        return await self._call(prompts.DOC_FROM_NOTES, header + joined, "doc", path)
 
-    async def _fit(self, notes: list[str], limit: int) -> list[str]:
+    async def _fit(self, notes: list[str], limit: int, path: str = "") -> list[str]:
         """Se gli appunti non stanno in una richiesta, li condensa a gruppi (di nuovo in parallelo)."""
         while len(notes) > 1 and sum(len(note) for note in notes) > limit:
             groups = [notes[i : i + 4] for i in range(0, len(notes), 4)]
+            self._step(path, more=sum(len(group) > 1 for group in groups))
             reduced = await asyncio.gather(*(
-                self._call(prompts.REDUCE_NOTES, "\n\n---\n\n".join(group), "reduce")
+                self._call(prompts.REDUCE_NOTES, "\n\n---\n\n".join(group), "reduce", path)
                 if len(group) > 1 else _passthrough(group[0])
                 for group in groups
             ))

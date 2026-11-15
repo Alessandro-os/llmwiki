@@ -166,6 +166,92 @@ def test_documents_index_in_parallel_and_can_be_added_meanwhile(tmp_path):
     asyncio.run(scenario())
 
 
+async def wait_until(condition, limit: float = 20.0) -> None:
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    while not condition():
+        await asyncio.sleep(0.05)
+        assert loop.time() - started < limit
+
+
+def test_reading_shows_progress_time_and_model(tmp_path):
+    """Percentuale e tempo mentre legge un documento lungo; alla fine modello e durata restano
+    salvati nel documento."""
+    cfg = make_cfg(tmp_path, chunk_chars=2000, concurrency=2)
+    cfg.docs_dir.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(f"Riga {n}: il valore registrato è {n * 3}." for n in range(400))
+    (cfg.docs_dir / "lungo.txt").write_text(body, encoding="utf-8")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.llm.delay = 0.15
+        await wiki.indexer.start()
+        seen = []
+
+        def sample():
+            reading = wiki.indexer.status()["reading"]
+            seen.extend(r["percent"] for r in reading)
+            return wiki.indexer.status()["ready"] == 1
+
+        await wait_until(sample)
+        assert seen and min(seen) < max(seen) <= 99  # sale, e non dice 100 prima della fine
+        status = wiki.indexer.status()
+        assert status["reading"] == [] and status["last_done"]["path"] == "lungo.txt"
+        assert status["last_done"]["model"] == "demo" == status["reader"]
+        row = wiki.store.get_doc("lungo.txt")
+        assert row["model"] == "demo" and row["seconds"] > 0 and row["read_at"] > 0
+        await wiki.indexer.stop()
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_reading_can_be_paused_and_resumed(tmp_path):
+    cfg = make_cfg(tmp_path, concurrency=2, watch_seconds=0.2)
+    write_docs(cfg, "", 6)
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.llm.delay = 0.3
+        await wiki.indexer.start()
+        await wait_until(lambda: wiki.indexer.status()["reading"])
+        await wiki.indexer.pause()
+        status = wiki.indexer.status()
+        assert status["paused"] and status["reading"] == [] and status["indexing"] == 0
+        ready = status["ready"]
+        await asyncio.sleep(0.8)  # in pausa non parte niente, nemmeno con la sorveglianza attiva
+        assert wiki.indexer.status()["ready"] == ready < 6
+        wiki.indexer.resume()
+        await wait_until(lambda: wiki.indexer.status()["ready"] == 6)
+        await wiki.indexer.stop()
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_old_database_gets_the_new_columns(tmp_path):
+    """Uno spazio creato da una versione precedente si apre: le colonne nuove si aggiungono."""
+    import sqlite3
+
+    from llmwiki.store import Store
+
+    wiki_dir = tmp_path / "wiki"
+    wiki_dir.mkdir()
+    old = sqlite3.connect(wiki_dir / "state.db")
+    old.execute("CREATE TABLE docs(path TEXT PRIMARY KEY, folder TEXT NOT NULL, seq INTEGER NOT NULL,"
+                " sha TEXT NOT NULL, size INTEGER NOT NULL, mtime REAL NOT NULL, status TEXT NOT NULL,"
+                " title TEXT NOT NULL DEFAULT '', lines INTEGER NOT NULL DEFAULT 0,"
+                " summary_sha TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',"
+                " attempts INTEGER NOT NULL DEFAULT 0, updated REAL NOT NULL DEFAULT 0)")
+    old.execute("INSERT INTO docs(path, folder, seq, sha, size, mtime, status) VALUES('a.md', '', 0, 'x', 1, 1, 'ready')")
+    old.commit()
+    old.close()
+    store = Store(tmp_path / "docs", wiki_dir)
+    row = store.get_doc("a.md")
+    assert row["status"] == "ready" and row["model"] == "" and row["read_at"] == 0
+    store.close()
+
+
 def test_long_document_is_summarized_in_chunks(tmp_path):
     cfg = make_cfg(tmp_path, chunk_chars=2000)
     cfg.docs_dir.mkdir(parents=True, exist_ok=True)

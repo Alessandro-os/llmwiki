@@ -211,6 +211,22 @@ def test_secret_is_kept_outside_the_space(tmp_path, monkeypatch):
         save_secret("PATH", "x")
 
 
+def test_reading_controls_and_reader_from_the_api(tmp_path):
+    """Ferma e Riprendi dal computer dell'app; la scheda dice chi l'ha scritta e in quanto."""
+    cfg = mock_cfg(tmp_path)
+    cfg.docs_dir.mkdir(parents=True)
+    (cfg.docs_dir / "carnot.md").write_text(NOTE, encoding="utf-8")
+    with TestClient(create_app(Wiki(cfg)), **LOCAL) as client:
+        wait_ready(client, 1)
+        read = client.get("/api/summary", params={"doc": "carnot.md"}).json()["read"]
+        assert read["model"] == "demo" and read["read_at"] > 0
+        assert client.post("/api/admin/index/pause").json()["paused"] is True
+        assert client.post("/api/admin/index/resume").json()["paused"] is False
+    remote = {"base_url": "http://192.168.1.20:8765", "client": ("192.168.1.30", 50000)}
+    with TestClient(create_app(Wiki(cfg)), **remote) as client:
+        assert client.post("/api/admin/index/pause").status_code == 403
+
+
 def test_second_launch_while_the_first_is_starting_does_not_fail(monkeypatch):
     """Installatore e doppio clic insieme: la seconda copia parte quando la prima non risponde
     ancora. Deve aspettarla e uscire senza errori, non contenderle la porta."""

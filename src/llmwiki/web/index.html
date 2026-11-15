@@ -205,6 +205,27 @@ document.querySelector("nav").addEventListener("click", (event) => { if (event.t
 document.addEventListener("click", (event) => { const go = event.target.closest("[data-go]"); if (go) show(go.dataset.go); });
 
 // ---------------------------------------------------------------- stato
+const baseName = (path) => String(path || "").split("/").pop();
+function duration(seconds) {
+  const s = Math.max(0, Math.round(seconds || 0));
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s";
+  return Math.floor(s / 3600) + " h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + " min";
+}
+// La percentuale è indicativa: passi fatti sui passi previsti finora (vedi Progress in indexer.py).
+function readingHtml(reading, queue) {
+  let html = reading.map((r) => '<span>Leggo «' + esc(short(baseName(r.path), 40)) + "» · " + r.percent + "% · " + duration(r.seconds) +
+    '</span><div class="bar"><div style="width:' + r.percent + '%"></div></div>').join("");
+  const others = queue - reading.length;
+  html += '<span class="muted">Modello: ' + esc(S.reader) + (others > 0 ? " · in coda altri " + others : "") + "</span>";
+  return html + (S.local ? '<button data-read="pause">Ferma la lettura</button>' : "");
+}
+$("statusBox").addEventListener("click", async (event) => {
+  const action = event.target.dataset.read; if (!action) return;
+  event.target.disabled = true;
+  try { await post("/api/admin/index/" + action); } catch (error) { alert(error.message); }
+  refreshStatus();
+});
 async function refreshStatus() {
   try { S = await api("/api/status"); } catch (error) { $("statusBox").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; return; }
   $("navSettings").hidden = !S.local;
@@ -216,11 +237,14 @@ async function refreshStatus() {
     if (document.activeElement !== sel) sel.value = S.space;
     $("spaceWrap").hidden = false;
   }
-  const queue = S.pending + S.indexing;
+  const queue = S.pending + S.indexing, reading = S.reading || [];
   let html = "<b>" + S.ready + (S.ready === 1 ? " documento pronto" : " documenti pronti") + "</b>";
-  if (S.waiting) html += '<span class="warn">Il modello non risponde: riprovo da solo tra poco.</span>';
+  if (S.paused) html += "<span>Lettura ferma. Riprende da sola al prossimo avvio dell'app.</span>" + (S.local ? '<button data-read="resume">Riprendi</button>' : "");
+  else if (S.waiting) html += '<span class="warn">Il modello non risponde: riprovo da solo tra poco.</span>';
+  else if (reading.length) html += readingHtml(reading, queue);
   else if (queue) html += "<span>Sto leggendo altri " + queue + "…</span><div class=\"bar\"><div style=\"width:" + Math.round(100 * S.ready / Math.max(S.total, 1)) + '%"></div></div>';
   else if (S.busy) html += "<span>Aggiorno i riassunti delle cartelle…</span>";
+  if (!reading.length && S.last_done && S.last_done.path) html += '<span class="muted">«' + esc(short(baseName(S.last_done.path), 40)) + "» letto in " + duration(S.last_done.seconds) + "</span>";
   if (S.error) html += '<span class="warn">' + S.error + (S.error === 1 ? " file non letto" : " file non letti") + (S.local ? ' · <button class="link" data-go="settings">vedi</button>' : "") + "</span>";
   if (S.provider === "mock") html += '<span class="muted">Modalità demo</span>';
   $("statusBox").innerHTML = html;
@@ -430,9 +454,14 @@ async function openNode(id) {
     : '<button class="item" data-node="' + esc(c.ref) + '"><span class="kind">Gruppo</span>Riassunto di un gruppo di documenti</button>');
   $("browser").innerHTML = crumbs(id.split("::")[0]) + '<div class="doc">' + md(data.text) + '</div><div class="list">' + rows.join("") + "</div>";
 }
+function readBy(read) {
+  if (!read || !read.read_at) return "Scheda scritta dal modello (modello non registrato: letto prima della versione 0.5)";
+  const day = new Date(read.read_at * 1000).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+  return "Scheda scritta da " + esc(read.model || "un modello") + " in " + duration(read.seconds) + ", il " + day;
+}
 async function openDoc(doc) {
   const data = await api("/api/summary?doc=" + encodeURIComponent(doc));
-  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="doc"><div class="small muted">Scheda scritta dal modello · ' + esc(doc) + "</div>" + md(data.text) + '</div><div class="row" style="margin-top:10px"><button id="fullText">Leggi il testo originale</button></div>';
+  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="doc"><div class="small muted">' + readBy(data.read) + " · " + esc(doc) + "</div>" + md(data.text) + '</div><div class="row" style="margin-top:10px"><button id="fullText">Leggi il testo originale</button></div>';
   $("fullText").onclick = () => openText(doc, 1, 0);
 }
 async function openText(doc, start, end, hiStart, hiEnd) {

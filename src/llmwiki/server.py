@@ -187,7 +187,10 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
 
     @app.get("/api/summary")
     async def summary(doc: str) -> dict:
-        return {"doc": doc, "text": hub.wiki.tools.read_summary(doc)}
+        text = hub.wiki.tools.read_summary(doc)
+        row = hub.wiki.store.get_doc(norm_path(doc))
+        read = {key: row[key] for key in ("model", "seconds", "read_at")} if row else {}
+        return {"doc": doc, "text": text, "read": read}
 
     @app.get("/api/document")
     async def document(doc: str, start: int = 1, end: int = 0) -> dict:
@@ -404,6 +407,20 @@ def _admin_routes(app: FastAPI, hub: Hub) -> None:
         return {"spaces": spaces.spaces}
 
 
+def _reading_routes(app: FastAPI, hub: Hub) -> None:
+    """Fermare e riprendere la lettura dei documenti: solo dal computer dell'app."""
+
+    @app.post("/api/admin/index/pause")
+    async def pause_reading() -> dict:
+        await hub.wiki.indexer.pause()
+        return hub.wiki.indexer.status()
+
+    @app.post("/api/admin/index/resume")
+    async def resume_reading() -> dict:
+        hub.wiki.indexer.resume()
+        return hub.wiki.indexer.status()
+
+
 def create_app(wiki_or_hub: Wiki | Hub) -> FastAPI:
     hub = wiki_or_hub if isinstance(wiki_or_hub, Hub) else Hub(wiki_or_hub)
     mcp = build_mcp(hub)
@@ -428,5 +445,6 @@ def create_app(wiki_or_hub: Wiki | Hub) -> FastAPI:
             error, lambda _request, exc, status=status: JSONResponse({"error": str(exc)}, status_code=status))
     _wiki_routes(app, hub)
     _admin_routes(app, hub)
+    _reading_routes(app, hub)
     app.mount("/", mcp_app)  # il server MCP risponde su /mcp: va montato dopo le rotte dell'API
     return app

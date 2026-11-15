@@ -194,7 +194,30 @@ parti di un documento lungo, le sottocartelle e i nodi dello stesso livello dell
 Un server locale che elabora una richiesta alla volta (come Strata) mette comunque in fila le
 richieste: il parallelismo rende soprattutto con i servizi online.
 
-## 2.9 Quante chiamate al modello
+## 2.9 Avanzamento, tempo e modello
+
+In basso a sinistra, per ogni documento in lettura: nome, percentuale e tempo trascorso,
+poi il modello che legge (`llm.summary_model`) e quanti documenti aspettano in coda. Finito un
+documento resta scritto quanto ci ha messo.
+
+La percentuale è **indicativa**: passi fatti su passi previsti. I passi sono l'estrazione del
+testo più le chiamate al modello. Per un documento lungo si conoscono solo dopo averlo diviso
+in parti, e le condensazioni si aggiungono quando servono: la percentuale può fermarsi o
+tornare un po' indietro, e non arriva a 100 prima della fine.
+
+Ogni documento letto ricorda **modello, durata e data** (colonne `model`, `seconds`,
+`read_at` di `state.db`). La scheda in Documenti li mostra: "Scheda scritta da … in …". I
+documenti letti prima della 0.5 dicono "modello non registrato".
+
+**Ferma la lettura** (solo dal computer dell'app) interrompe le schede in corso e
+l'aggiornamento dell'albero. I documenti tornano in coda, senza perdere niente: si riparte da
+capo quando si preme Riprendi. La pausa dura finché l'app resta aperta, e al riavvio la
+lettura riprende da sola.
+
+Gli spazi creati da versioni precedenti si aprono normalmente: le colonne nuove si
+aggiungono all'apertura.
+
+## 2.10 Quante chiamate al modello
 
 - Documento che sta in una richiesta: **1** chiamata.
 - Documento lungo in *n* parti: *n* per gli appunti, eventuali chiamate per condensarli, **1**
@@ -205,7 +228,7 @@ Esempio: i 10 documenti di `examples/docs` stanno in 6 cartelle più la radice, 
 di 8 documenti. Prima lettura: 10 schede + 7 mappe = 17 chiamate. Con Qwen su Strata una
 scheda richiede circa 45 secondi.
 
-## 2.10 Quando qualcosa va storto
+## 2.11 Quando qualcosa va storto
 
 | Caso | Che cosa fa l'app |
 |---|---|

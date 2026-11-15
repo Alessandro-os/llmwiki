@@ -4,12 +4,21 @@
 
 Per chi la usa:
 
+- Lettura dei documenti più chiara: in basso a sinistra nome del documento, percentuale
+  indicativa, tempo trascorso, modello che legge e documenti in coda; alla fine, quanto ci ha
+  messo. Un tasto "Ferma la lettura" la interrompe, "Riprendi" la fa ripartire.
+- Ogni documento ricorda quale modello l'ha letto, in quanto tempo e quando: lo dice la sua
+  scheda in Documenti.
 - Due avvii a pochi secondi di distanza (l'installatore e un doppio clic) non danno più
   l'errore "il server interno non è partito": la seconda copia aspetta la prima e la porta in
   primo piano.
 
 Per chi sviluppa:
 
+- `indexer.Progress` (avanzamento per documento), `Indexer.pause()` / `resume()`, rotte
+  `/api/admin/index/pause` e `/resume`; `status()` aggiunge `reading`, `last_done`, `paused`,
+  `reader`. Colonne `model`, `seconds`, `read_at` in `docs`, aggiunte anche ai database
+  esistenti (`Store._add_columns`, primo aggiornamento dello schema).
 - `desktop._claim_instance()`: lucchetto su `llmwiki.lock` per una sola copia. Test:
   `test_second_launch_while_the_first_is_starting_does_not_fail`.
 

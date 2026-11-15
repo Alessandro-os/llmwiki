@@ -60,6 +60,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
   tokenize='unicode61 remove_diacritics 2'
 );
 """
+# Colonne aggiunte dopo la prima versione: si creano anche nei database già esistenti
+# (ALTER TABLE all'apertura), così uno spazio vecchio si apre senza perdere nulla.
+DOC_COLUMNS = {
+    "model": "TEXT NOT NULL DEFAULT ''",   # modello che ha scritto la scheda
+    "seconds": "REAL NOT NULL DEFAULT 0",  # durata della lettura
+    "read_at": "REAL NOT NULL DEFAULT 0",  # quando è stata finita
+}
 
 FTS_CHUNK = 30
 FTS_OVERLAP = 5
@@ -124,6 +131,13 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(SCHEMA)
+        self._add_columns()
+
+    def _add_columns(self) -> None:
+        existing = {row["name"] for row in self.db.execute("PRAGMA table_info(docs)")}
+        for name, definition in DOC_COLUMNS.items():
+            if name not in existing:
+                self.db.execute(f"ALTER TABLE docs ADD COLUMN {name} {definition}")
 
     def close(self) -> None:
         with self.lock:
@@ -217,12 +231,14 @@ class Store:
         with self.lock:
             self.db.execute("UPDATE docs SET lines=? WHERE path=?", (count, path))
 
-    def set_ready(self, path: str, title: str, summary_sha: str) -> None:
+    def set_ready(self, path: str, title: str, summary_sha: str, model: str = "",
+                  seconds: float = 0.0) -> None:
+        now = time.time()
         with self.lock:
             self.db.execute(
-                "UPDATE docs SET status='ready', error='', title=?, summary_sha=?, updated=?"
-                " WHERE path=?",
-                (title, summary_sha, time.time(), path),
+                "UPDATE docs SET status='ready', error='', title=?, summary_sha=?, updated=?,"
+                " model=?, seconds=?, read_at=? WHERE path=?",
+                (title, summary_sha, now, model, round(seconds, 1), now, path),
             )
 
     def move_doc(self, old: str, new: str, size: int, mtime: float) -> None:
