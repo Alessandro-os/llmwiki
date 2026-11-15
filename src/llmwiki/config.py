@@ -14,11 +14,12 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
-SECTIONS = ("llm", "index", "verify", "agent", "server")
+SECTIONS = ("llm", "index", "ocr", "verify", "agent", "server")
 # Una riga di spiegazione per sezione, scritta nel file per chi lo apre a mano.
 NOTES = {
     "llm": "provider: anthropic | openai (qualunque server compatibile: Strata, Ollama, LM Studio) | mock",
     "index": "concurrency: richieste al modello in parallelo; fanout: elementi riassunti da ogni nodo",
+    "ocr": "mode: text (testo del PDF) | ocr; kind: server (modello che legge immagini) | tesseract",
     "verify": "judge: auto | nli | llm; threshold: confidenza minima per accettare una citazione",
     "agent": "max_steps: letture al massimo per domanda; explorers: sotto-agenti in parallelo",
     "server": "host 0.0.0.0 espone l'app in rete (serve almeno un utente in [server.users])",
@@ -58,6 +59,20 @@ class IndexConfig:
 
 
 @dataclass
+class OcrConfig:
+    # Come leggere i PDF: "text" prende il testo che il file contiene; "ocr" legge ogni pagina
+    # come immagine con l'OCR scelto (scansioni, appunti scritti a mano, formule).
+    mode: str = "text"
+    kind: str = ""          # "server": un modello che legge immagini (API OpenAI) | "tesseract"
+    base_url: str = ""      # kind "server"
+    model: str = ""         # kind "server"
+    api_key_env: str = ""   # kind "server": variabile con la chiave, se il server la chiede
+    path: str = ""          # kind "tesseract": percorso di tesseract.exe
+    language: str = "ita+eng"  # kind "tesseract": lingue installate da usare
+    dpi: int = 200          # risoluzione a cui le pagine diventano immagini
+
+
+@dataclass
 class VerifyConfig:
     enabled: bool = True
     # "auto": decision model NLI se installato, poi il modello linguistico sui casi dubbi;
@@ -92,6 +107,7 @@ class Config:
     wiki_dir: Path
     llm: LLMConfig = field(default_factory=LLMConfig)
     index: IndexConfig = field(default_factory=IndexConfig)
+    ocr: OcrConfig = field(default_factory=OcrConfig)
     verify: VerifyConfig = field(default_factory=VerifyConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     server: ServerConfig = field(default_factory=ServerConfig)

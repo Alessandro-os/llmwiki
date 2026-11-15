@@ -25,7 +25,7 @@ sopra.
       ├── tools.py                  strumenti di navigazione
       ├── llm.py                    interfaccia unica verso i modelli e ripieghi
       ├── store.py                  file su disco + SQLite (stato, albero, ricerca, cronologia)
-      ├── extract.py                da file a righe numerate
+      ├── extract.py ── ocr.py      da file a righe numerate · qualunque OCR (server o Tesseract)
       ├── prompts.py                tutti i prompt di sistema
       ├── config.py                 wiki.toml: voci, predefiniti, lettura e scrittura
       ├── update.py ── download.py  aggiornamenti da GitHub · scaricamento verificato (anche nli.py)
@@ -41,6 +41,7 @@ sopra.
 | che cosa può fare l'agente | `tools.py` (lo strumento) e `agent.py` (il ciclo) |
 | l'ordine o la severità dei controlli sulle citazioni | `verify.py` |
 | il supporto a un formato di file | `extract.py` |
+| un tipo di OCR | una nuova classe `Ocr` in `ocr.py` e una voce in `make_ocr` |
 | un nuovo fornitore compatibile OpenAI | una riga in `PROVIDERS`, `app.py` |
 | un fornitore con un protocollo suo | una nuova classe `LLM` in `llm.py` e una voce in `make_llm` |
 | una nuova impostazione | il campo in `config.py`; se va nell'interfaccia, anche `EDITABLE` in `server.py` |
@@ -87,6 +88,7 @@ spazi veri.
 | `test_backends.py` | I due protocolli contro server finti: strumenti, giudice senza logprob, parametri facoltativi rifiutati da Claude, server spento non scambiato per server senza logprob |
 | `test_independence.py` | Modello che rifiuta o ignora gli strumenti, modalità testuale forzata, contesto piccolo, lettura che aspetta il modello invece di fallire, chiave sbagliata segnalata senza riprovare all'infinito |
 | `test_app.py` | Configurazione, spazi, persone e impostazioni dall'interfaccia, qualunque fornitore, avanzamento in diretta, cronologia e approfondimenti, amministrazione solo locale, chiavi fuori dallo spazio, cascata del decision model |
+| `test_ocr.py` | OCR contro server finti: lettura, errori come per i modelli, prova con l'immagine nota, ricerca (prima chi legge), PDF scansionato con OCR e senza, documento in attesa se l'OCR manca o è spento, impostazioni dall'interfaccia; Tesseract vero se installato |
 | `test_update.py` | Aggiornamenti contro un GitHub finto: versione nuova, nessuna novità, rete assente, impronta sbagliata (file cancellato, niente installazione), pulizia degli installatori usati |
 | `test_evals.py` | Coerenza dei file del banco di prova; il decision model mantiene la qualità misurata (se installato) |
 

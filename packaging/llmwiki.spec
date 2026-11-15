@@ -8,7 +8,8 @@ datas = [(ROOT + "/src/llmwiki/web", "llmwiki/web")]
 binaries, hiddenimports = [], []
 # mcp.cli richiede typer (non serve all'app) e fa fallire l'analisi: resta fuori.
 SKIP = ("mcp.cli", "onnxruntime.transformers", "onnxruntime.quantization", "onnxruntime.tools")
-for package in ("mcp", "anthropic", "uvicorn", "onnxruntime", "tokenizers", "pystray", "docx", "pypdf"):
+for package in ("mcp", "anthropic", "uvicorn", "onnxruntime", "tokenizers", "pystray", "docx", "pypdf",
+                "pypdfium2", "pypdfium2_raw"):
     datas += collect_data_files(package)
     binaries += collect_dynamic_libs(package)
     hiddenimports += collect_submodules(

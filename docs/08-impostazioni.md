@@ -49,6 +49,19 @@ imposta `mock`.
 | `chunk_chars` | `24000` | file | Oltre questa lunghezza un documento viene letto a pezzi |
 | `watch_seconds` | `20` | file | Ogni quanto l'app ricontrolla la cartella dei documenti |
 
+## [ocr]
+
+Come leggere i PDF ([pagina 2](02-lettura-dei-documenti.md), 2.2.1).
+
+| Voce | Predefinito | App | Effetto |
+|---|---|---|---|
+| `mode` | `"text"` | sì | `text`: il testo che il PDF contiene; `ocr`: ogni pagina letta come immagine dall'OCR scelto |
+| `kind` | `""` | sì | `server` (un modello che legge immagini, API compatibile OpenAI) oppure `tesseract` |
+| `base_url`, `model` | `""` | sì | Solo `server`: indirizzo e nome del modello |
+| `api_key_env` | `""` | API | Solo `server`: variabile con la chiave, se il server ne chiede una |
+| `path`, `language` | `""`, `"ita+eng"` | sì | Solo `tesseract`: percorso del programma e lingue installate da usare |
+| `dpi` | `200` | file | Risoluzione a cui le pagine diventano immagini |
+
 ## [verify]
 
 | Voce | Predefinito | App | Effetto |

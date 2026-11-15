@@ -13,7 +13,7 @@ import os
 import re
 import secrets
 
-from . import apphome, nli
+from . import apphome, nli, ocr
 from .agent import Answer, WikiAgent
 from .config import Config
 from .indexer import Indexer
@@ -70,6 +70,8 @@ class Wiki:
 
     async def aclose(self) -> None:
         await self.llm.aclose()
+        if self.indexer.ocr:
+            self.indexer.ocr.close()
         self.store.close()
 
 
@@ -119,8 +121,11 @@ def add_user(cfg: Config, name: str) -> str:
     return token
 
 
-# Server locali che l'app sa riconoscere da sola (tutti con API compatibile OpenAI).
-LOCAL_SERVERS = (("Strata / llama.cpp", 8080), ("Ollama", 11434), ("LM Studio", 1234), ("vLLM", 8000))
+# Server locali che l'app sa riconoscere da sola (tutti con API compatibile OpenAI): servono
+# sia i modelli sia gli OCR che leggono immagini (Unlimited OCR con SGLang, per esempio).
+LOCAL_SERVERS = (("Strata / llama.cpp", 8080), ("llama.cpp", 8090), ("Ollama", 11434),
+                 ("LM Studio", 1234), ("vLLM", 8000), ("SGLang", 30000), ("SGLang", 10000))
+OCR_MODELS_PER_SERVER = 6  # un server con molti modelli li carica uno alla volta per provarli
 
 
 async def detect_local_servers() -> list[dict]:
@@ -139,6 +144,32 @@ async def detect_local_servers() -> list[dict]:
 
     found = await asyncio.gather(*(probe(name, port) for name, port in LOCAL_SERVERS))
     return [server for server in found if server]
+
+
+async def detect_ocr() -> list[dict]:
+    """OCR sul computer che leggono davvero l'immagine di prova: i modelli che vedono le
+    immagini sui server locali e Tesseract. Chi non la legge resta nell'elenco con il motivo."""
+
+    def try_model(server: dict, model: str) -> dict:
+        engine = ocr.ServerOcr(server["base_url"], model, timeout=60)
+        try:
+            result = ocr.probe(engine)
+        finally:
+            engine.close()
+        return {"kind": "server", "name": f"{model} su {server['name']}", "base_url": server["base_url"],
+                "model": model, "ok": result["ok"], "seconds": result["seconds"], "note": "",
+                "error": result["error"]}
+
+    async def try_server(server: dict) -> list[dict]:
+        found = []
+        for model in server["models"][:OCR_MODELS_PER_SERVER]:  # uno alla volta per server
+            found.append(await asyncio.to_thread(try_model, server, model))
+        return found
+
+    servers = await detect_local_servers()
+    groups = await asyncio.gather(*(try_server(s) for s in servers), asyncio.to_thread(ocr.find_tesseract))
+    found = [item for group in groups for item in group]
+    return sorted(found, key=lambda item: not item["ok"])
 
 
 def use_local_server(cfg: Config, server: dict) -> None:

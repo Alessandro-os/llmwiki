@@ -9,6 +9,12 @@ Per chi la usa:
   messo. Un tasto "Ferma la lettura" la interrompe, "Riprendi" la fa ripartire.
 - Ogni documento ricorda quale modello l'ha letto, in quanto tempo e quando: lo dice la sua
   scheda in Documenti.
+- OCR per i PDF scansionati e gli appunti scritti a mano, con qualunque OCR. In Impostazioni
+  → Lettura dei documenti si sceglie "Normale" o "OCR". "Cerca gli OCR sul computer" trova da
+  solo i server OCR accesi (Unlimited OCR, DeepSeek-OCR, modelli che vedono le immagini su
+  llama.cpp, Ollama, LM Studio, Strata) e Tesseract, e propone solo quelli che leggono
+  davvero un'immagine di prova. Ogni documento ricorda quale OCR l'ha letto. Se l'OCR è
+  spento, i PDF aspettano invece di finire in errore.
 - Tasto Aggiorna: a ogni avvio l'app controlla su GitHub se c'è una versione nuova e, se c'è,
   lo mostra in basso a destra nella pagina principale. Premendolo scarica la versione nuova,
   ne controlla l'impronta, si chiude e si riapre aggiornata, senza lasciare file della
@@ -25,6 +31,11 @@ Per chi sviluppa:
   `/api/admin/index/pause` e `/resume`; `status()` aggiunge `reading`, `last_done`, `paused`,
   `reader`. Colonne `model`, `seconds`, `read_at` in `docs`, aggiunte anche ai database
   esistenti (`Store._add_columns`, primo aggiornamento dello schema).
+- `ocr.py` (`Ocr`, `ServerOcr`, `TesseractOcr`, `make_ocr`, `probe`, `find_tesseract`),
+  `app.detect_ocr`, sezione `[ocr]` in `wiki.toml`, rotte `/api/admin/ocr/detect` e
+  `/ocr/test`, colonna `ocr` in `docs`. Dipendenza nuova: pypdfium2 (pagine PDF come
+  immagini). `LOCAL_SERVERS` aggiunge llama.cpp 8090 e SGLang 30000 e 10000. Test in
+  `tests/test_ocr.py`.
 - `update.py` (`Updater`: controllo su GitHub, scaricamento, installazione silenziosa) e
   `download.py` (`fetch_verified`, ora usato anche da `nli.Download`). Rotta
   `/api/admin/update`; `/api/status` aggiunge `update` nell'app desktop. Installatore:

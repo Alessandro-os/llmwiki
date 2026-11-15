@@ -25,12 +25,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel
 
 from . import __version__
-from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, save_secret
+from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, detect_ocr, save_secret
 from .config import LOOPBACK, Config
 from .extract import SUPPORTED
 from .icon import icon_bytes
 from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
+from .ocr import make_ocr
+from .ocr import probe as probe_ocr
 from .store import norm_path
 from .tools import ToolError
 
@@ -42,6 +44,7 @@ EDITABLE = {
     "llm": {"provider", "base_url", "api_key_env", "agent_model", "summary_model", "judge_model",
             "send_reasoning_effort", "agent_effort", "summary_effort", "tool_mode", "context_tokens"},
     "index": {"concurrency", "fanout"},
+    "ocr": {"mode", "kind", "base_url", "model", "api_key_env", "path", "language"},
     "verify": {"enabled", "judge", "threshold"},
     "server": {"host", "port"},
 }
@@ -128,6 +131,8 @@ def apply_settings(cfg: Config, patch: dict) -> None:
         raise ValueError("la soglia deve stare tra 0 e 1")
     if not 1 <= cfg.index.concurrency <= 64 or not 2 <= cfg.index.fanout <= 64:
         raise ValueError("parallelismo tra 1 e 64, ampiezza dei gruppi tra 2 e 64")
+    if cfg.ocr.mode not in ("text", "ocr") or cfg.ocr.kind not in ("", "server", "tesseract"):
+        raise ValueError("ocr.mode: text oppure ocr; ocr.kind: server oppure tesseract")
     if cfg.server.host not in LOOPBACK and not cfg.server.users:
         raise ValueError("per condividere in rete crea prima almeno un utente")
 
@@ -202,7 +207,7 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
     async def summary(doc: str) -> dict:
         text = hub.wiki.tools.read_summary(doc)
         row = hub.wiki.store.get_doc(norm_path(doc))
-        read = {key: row[key] for key in ("model", "seconds", "read_at")} if row else {}
+        read = {key: row[key] for key in ("model", "seconds", "read_at", "ocr")} if row else {}
         return {"doc": doc, "text": text, "read": read}
 
     @app.get("/api/document")
@@ -321,6 +326,9 @@ def _admin_routes(app: FastAPI, hub: Hub) -> None:
         apply_settings(cfg, patch)
         cfg.save()
         await hub.replace(cfg)
+        if "ocr" in patch:  # cambiato il modo di leggere i PDF: chi non si leggeva riprova
+            hub.wiki.store.retry_errors()
+            hub.wiki.indexer.trigger()
         return _settings(hub)
 
     @app.get("/api/admin/detect")
@@ -442,6 +450,25 @@ def _reading_routes(app: FastAPI, hub: Hub) -> None:
         return hub.updater.status()
 
 
+def _ocr_routes(app: FastAPI, hub: Hub) -> None:
+    """Cercare e provare gli OCR: solo dal computer dell'app."""
+
+    @app.get("/api/admin/ocr/detect")
+    async def ocr_detect() -> dict:
+        return {"found": await detect_ocr()}
+
+    @app.post("/api/admin/ocr/test")
+    async def ocr_test() -> dict:
+        """Prova l'OCR salvato con l'immagine di prova."""
+        engine = make_ocr(hub.wiki.cfg.ocr)
+        if engine is None:
+            return {"ok": False, "error": "nessun OCR collegato", "text": "", "seconds": 0}
+        try:
+            return dict(await asyncio.to_thread(probe_ocr, engine), name=engine.name)
+        finally:
+            engine.close()
+
+
 def create_app(wiki_or_hub: Wiki | Hub) -> FastAPI:
     hub = wiki_or_hub if isinstance(wiki_or_hub, Hub) else Hub(wiki_or_hub)
     mcp = build_mcp(hub)
@@ -467,5 +494,6 @@ def create_app(wiki_or_hub: Wiki | Hub) -> FastAPI:
     _wiki_routes(app, hub)
     _admin_routes(app, hub)
     _reading_routes(app, hub)
+    _ocr_routes(app, hub)
     app.mount("/", mcp_app)  # il server MCP risponde su /mcp: va montato dopo le rotte dell'API
     return app

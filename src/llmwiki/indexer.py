@@ -19,11 +19,13 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import prompts
 from .config import Config
 from .extract import ExtractError, extract_lines, is_supported, numbered
 from .llm import LLM, LLMError
+from .ocr import Ocr, OcrError, make_ocr
 from .store import Store, map_id, node_id, sha_file, sha_text
 
 log = logging.getLogger("llmwiki.indexer")
@@ -54,6 +56,9 @@ class Progress:
     started: float = field(default_factory=time.monotonic)
     done: int = 0
     total: int = 2  # estrazione + una chiamata, finché non si sa di più
+    ocr: str = ""     # l'OCR che legge le pagine, se il documento passa dall'OCR
+    pages: int = 0    # pagine da leggere con l'OCR (ognuna è un passo)
+    stopped: bool = False  # lettura interrotta: l'OCR, che gira in un thread, smette alla pagina dopo
 
     def percent(self) -> int:
         return min(99, round(100 * self.done / max(1, self.total)))
@@ -84,6 +89,8 @@ class Indexer:
         self.waiting = ""       # perché l'indicizzazione è ferma in attesa del modello
         self._resume_at = 0.0   # prima di questo istante non si avviano nuove schede
         self.paused = False     # fermata dall'utente: non parte nulla finché non riprende
+        self.waiting_ocr = False  # l'attesa riguarda l'OCR, non il modello
+        self.ocr = make_ocr(cfg.ocr) if cfg.ocr.mode == "ocr" else None
         self.reading: dict[str, Progress] = {}
         self.last_done: dict = {}
         self._tree_task: asyncio.Task | None = None
@@ -193,8 +200,10 @@ class Indexer:
         counts["llm_calls"] = dict(self.llm.calls)
         counts["paused"] = self.paused
         counts["reader"] = self.model_name  # chi legge i documenti ("model" è chi risponde)
+        counts["waiting_ocr"] = self.waiting_ocr
         counts["reading"] = [
-            {"path": path, "percent": p.percent(), "seconds": round(p.seconds()), "model": p.model}
+            {"path": path, "percent": p.percent(), "seconds": round(p.seconds()), "model": p.model,
+             "ocr": p.ocr}
             for path, p in list(self.reading.items())
         ]
         counts["last_done"] = self.last_done
@@ -281,15 +290,25 @@ class Indexer:
                 await self._read_doc(path, progress)
             except asyncio.CancelledError:
                 # fermata dall'utente o chiusura dell'app: il documento torna in coda
+                progress.stopped = True
                 self.store.set_status(path, "pending")
                 raise
+            except OcrError as exc:
+                if exc.unavailable:  # OCR spento o non collegato: si aspetta, come per il modello
+                    log.warning("OCR non disponibile, %s resta in coda: %s", path, exc)
+                    self.store.set_status(path, "pending")
+                    self.waiting, self.waiting_ocr = str(exc), True
+                    self._resume_at = asyncio.get_running_loop().time() + RETRY_SECONDS
+                else:
+                    log.warning("documento %s non letto dall'OCR: %s", path, exc)
+                    self.store.set_status(path, "error", str(exc), bump=True)
             except LLMError as exc:
                 if exc.unavailable:
                     # Il modello non risponde: il documento torna in coda e si riprova tra poco.
                     # Non è un errore del documento, e non deve restare segnato come tale.
                     log.warning("modello non raggiungibile, %s resta in coda: %s", path, exc)
                     self.store.set_status(path, "pending")
-                    self.waiting = str(exc)
+                    self.waiting, self.waiting_ocr = str(exc), False
                     self._resume_at = asyncio.get_running_loop().time() + RETRY_SECONDS
                 else:
                     log.warning("documento %s non indicizzato: %s", path, exc)
@@ -306,8 +325,13 @@ class Indexer:
     async def _read_doc(self, path: str, progress: Progress) -> None:
         sha = self.store.get_doc(path)["sha"]
         self.store.set_status(path, "indexing")
-        lines = await asyncio.to_thread(extract_lines, self.store.doc_file(path))
-        self._step(path)
+        file = self.store.doc_file(path)
+        ocr = self._ocr_for(file)
+        progress.ocr = ocr.name if ocr else ""
+        lines = await asyncio.to_thread(extract_lines, file, ocr,
+                                        lambda done, total: self._on_page(progress, done, total))
+        if not progress.pages:
+            self._step(path)
         self.store.write_atomic(self.store.text_file(path), "\n".join(lines))
         self.store.set_lines(path, len(lines))
         # Da qui il documento è già cercabile e leggibile, anche senza scheda.
@@ -325,10 +349,31 @@ class Indexer:
         self.store.write_atomic(self.store.summary_file(path), summary)
         await asyncio.to_thread(self.store.index_summary, path, body)
         seconds = progress.seconds()
-        self.store.set_ready(path, title_of(body, path), sha_text(summary), progress.model, seconds)
-        self.last_done = {"path": path, "seconds": round(seconds), "model": progress.model}
-        self.waiting = ""
+        self.store.set_ready(path, title_of(body, path), sha_text(summary), progress.model, seconds,
+                             progress.ocr)
+        self.last_done = {"path": path, "seconds": round(seconds), "model": progress.model, "ocr": progress.ocr}
+        if progress.ocr or not self.waiting_ocr:  # un file senza OCR non dice che l'OCR è tornato
+            self.waiting, self.waiting_ocr = "", False
         self._dirty.set()
+
+    def _ocr_for(self, file: Path) -> Ocr | None:
+        """L'OCR legge solo i PDF, e solo se è stato scelto in Impostazioni."""
+        if self.cfg.ocr.mode != "ocr" or file.suffix.lower() != ".pdf":
+            return None
+        if self.ocr is None:
+            raise OcrError("Nessun OCR collegato: Impostazioni → Lettura dei documenti → "
+                           "Cerca gli OCR sul computer", unavailable=True)
+        return self.ocr
+
+    @staticmethod
+    def _on_page(progress: Progress, done: int, total: int) -> None:
+        """Ogni pagina letta dall'OCR è un passo. Chiamata dal thread dell'estrazione."""
+        if progress.stopped:
+            raise OcrError("lettura interrotta")
+        if not progress.pages:
+            progress.pages = total
+            progress.total += total - 1  # l'estrazione contava come un passo solo
+        progress.done = done
     async def _summarize(self, path: str, lines: list[str]) -> str:
         """Scrive la scheda. La quantità di testo per richiesta parte dall'impostazione, tiene
         conto della finestra del modello se è nota e, se il modello rifiuta comunque la

@@ -31,7 +31,11 @@ Che cosa l'app non fa o non garantisce nella versione 0.4.1. Gli sviluppi possib
 
 ## Documenti
 
-- **PDF scansionati.** Senza testo estraibile vengono segnalati come non letti: manca l'OCR.
+- **PDF scansionati.** Si leggono solo con un OCR collegato (Impostazioni → Lettura dei
+  documenti), e solo i PDF: le immagini sciolte (.png, .jpg) non vengono lette. La qualità è
+  quella dell'OCR scelto: Tesseract va bene con il testo stampato, non con formule e scrittura
+  a mano. L'OCR non viene applicato di nuovo ai documenti già letti cambiando il modo:
+  solo a quelli nuovi o in errore.
 - **Immagini, tabelle complesse, formule in immagine** dentro PDF e Word non vengono lette.
   Delle tabelle Word si legge il testo delle celle.
 - **Fogli di calcolo e presentazioni** (`.xlsx`, `.pptx`) non sono supportati; i `.csv` sì.

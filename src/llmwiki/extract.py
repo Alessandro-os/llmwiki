@@ -6,6 +6,7 @@ l'agente legge, cita, e che il fact-checking va a riprendere.
 
 from __future__ import annotations
 
+import io
 import textwrap
 from html.parser import HTMLParser
 from pathlib import Path
@@ -26,9 +27,17 @@ def is_supported(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED
 
 
-def extract_lines(path: Path) -> list[str]:
+NO_TEXT = ("nessun testo estraibile: se è una scansione o sono appunti scritti a mano, scegli "
+           "l'OCR in Impostazioni → Lettura dei documenti")
+
+
+def extract_lines(path: Path, ocr=None, on_page=None) -> list[str]:
+    """Con `ocr` (un `ocr.Ocr`) le pagine dei PDF si leggono come immagini; `on_page(fatte,
+    totali)` segue l'avanzamento pagina per pagina."""
     ext = path.suffix.lower()
-    if ext == ".pdf":
+    if ext == ".pdf" and ocr is not None:
+        raw = _pdf_ocr(path, ocr, on_page or (lambda done, total: None))
+    elif ext == ".pdf":
         raw = _pdf(path)
     elif ext == ".docx":
         raw = _docx(path)
@@ -39,8 +48,8 @@ def extract_lines(path: Path) -> list[str]:
     else:
         raise ExtractError(f"formato non supportato: {ext}")
     lines = _normalize(raw)
-    if not any(line.strip() for line in lines):
-        raise ExtractError("nessun testo estraibile (se è una scansione serve un OCR)")
+    if not any(line.strip() and not line.startswith("=== Pagina") for line in lines):
+        raise ExtractError(NO_TEXT)
     return lines
 
 
@@ -67,7 +76,26 @@ def _pdf(path: Path) -> str:
         has_text = has_text or bool(text.strip())
         parts.append(f"=== Pagina {number} ===\n{text}")
     if not has_text:  # solo immagini: senza questo controllo resterebbero i soli numeri di pagina
-        raise ExtractError("nessun testo estraibile (se è una scansione serve un OCR)")
+        raise ExtractError(NO_TEXT)
+    return "\n\n".join(parts)
+
+
+def _pdf_ocr(path: Path, ocr, on_page) -> str:
+    """Ogni pagina diventa un'immagine (pypdfium2: pypdf sa leggere il testo ma non disegnare le
+    pagine) e l'OCR ne legge il testo. Una pagina alla volta: poca memoria anche con libri lunghi."""
+    import pypdfium2
+
+    document = pypdfium2.PdfDocument(str(path))
+    try:
+        total, parts = len(document), []
+        for number in range(total):
+            image = document[number].render(scale=ocr.dpi / 72).to_pil()
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            parts.append(f"=== Pagina {number + 1} ===\n{ocr.read(buffer.getvalue())}")
+            on_page(number + 1, total)
+    finally:
+        document.close()
     return "\n\n".join(parts)
 
 

@@ -16,6 +16,7 @@ stata scelta: va decisa prima di distribuirlo fuori dalla cerchia di chi lo sta 
 | Tokenizers (Hugging Face) | Apache-2.0 |
 | NumPy | BSD-3-Clause |
 | pypdf | BSD-3-Clause |
+| pypdfium2 e PDFium (pagine PDF come immagini, per l'OCR) | Apache-2.0 o BSD-3-Clause; PDFium BSD-3-Clause |
 | python-docx, lxml | MIT, BSD-3-Clause |
 | Pillow | MIT-CMU |
 | pystray | LGPL-3.0 (usata come libreria separata e sostituibile nella cartella dell'app) |
@@ -25,6 +26,9 @@ stata scelta: va decisa prima di distribuirlo fuori dalla cerchia di chi lo sta 
 | Componente | Licenza | Origine |
 |---|---|---|
 | mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 (decision model) | MIT | Hugging Face, `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`, revisione `b5113eb3` |
+
+Gli OCR (Tesseract, Unlimited OCR o altri) non fanno parte di LLMWiki: l'app usa quelli già
+installati o accesi sul computer, ognuno con la sua licenza.
 
 I modelli linguistici (locali o di Anthropic) non fanno parte di LLMWiki: ognuno ha la sua
 licenza e le sue condizioni d'uso.

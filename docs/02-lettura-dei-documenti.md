@@ -43,8 +43,40 @@ Ogni documento ha uno stato:
 |---|---|
 | `.txt .md .markdown .rst .csv .tsv .json .xml .yaml .yml .log .ini .toml .tex` | Testo così com'è. Codifica: UTF-16 solo se il file lo dichiara (BOM), poi UTF-8, poi Windows-1252. |
 | `.html .htm` | Solo il testo visibile; script e stili sono scartati. |
-| `.pdf` | Il testo di ogni pagina, preceduto da una riga `=== Pagina N ===`. Se nessuna pagina ha testo (una scansione) il documento va in errore con "serve un OCR". |
+| `.pdf` | Il testo di ogni pagina, preceduto da una riga `=== Pagina N ===`. Se nessuna pagina ha testo (una scansione) il documento va in errore e il messaggio dice di scegliere l'OCR. Con l'OCR (2.2.1) ogni pagina è letta come immagine. |
 | `.docx` | I paragrafi, poi le righe delle tabelle con le celle separate da una barra verticale. |
+
+### 2.2.1 PDF con l'OCR
+
+In Impostazioni → Lettura dei documenti, "Come leggere i PDF" è **Normale** (il testo che il
+PDF contiene, veloce) oppure **OCR** (per scansioni, appunti scritti a mano, formule). Vale per
+lo spazio, è `[ocr] mode` in `wiki.toml`, e solo per i PDF: gli altri formati non cambiano.
+
+L'app non dipende da un OCR preciso (`ocr.py`). Ne conosce due tipi:
+
+| Tipo | Che cos'è | Esempi |
+|---|---|---|
+| server | Un modello che legge immagini, servito con l'API compatibile OpenAI: riceve l'immagine della pagina e restituisce il testo | Unlimited OCR o DeepSeek-OCR con SGLang o vLLM; un modello con la vista su llama.cpp, Ollama, LM Studio, Strata |
+| tesseract | Il programma Tesseract installato sul computer | Tesseract 5 |
+
+**"Cerca gli OCR sul computer"** fa per gli OCR quello che "Cerca i modelli accesi" fa per i
+modelli:
+1. interroga i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000);
+2. a ogni modello, fino a 6 per server e uno alla volta, manda un'immagine con la scritta
+   `CARNOT 1824`;
+3. cerca Tesseract nel PATH e nelle cartelle d'installazione consuete.
+
+Un OCR è proposto come funzionante solo se legge davvero la scritta: chi risponde senza vedere
+l'immagine compare con il motivo. "Usa questo", poi "Salva e prova" ripete la prova.
+
+Le pagine diventano immagini a 200 dpi (pypdfium2), una alla volta. Ogni pagina è un passo
+dell'avanzamento (2.9). Il testo letto segue la stessa strada di quello estratto: righe
+numerate e citabili. Ogni documento ricorda l'OCR che l'ha letto (colonna `ocr`), e la sua
+scheda lo dice.
+
+Se l'OCR non c'è, è spento o è occupato, i PDF **aspettano** come quando il modello è spento.
+In basso a sinistra compare il motivo, e l'app riprova da sola ogni minuto. Cambiando il modo
+di leggere i PDF, i documenti in errore ripartono da soli.
 
 Il testo viene poi normalizzato: le righe più lunghe di 240 caratteri sono spezzate tra una
 parola e l'altra, le righe vuote consecutive diventano una sola, le vuote in fondo spariscono.
