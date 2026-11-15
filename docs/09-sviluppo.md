@@ -28,7 +28,8 @@ sopra.
       ├── extract.py                da file a righe numerate
       ├── prompts.py                tutti i prompt di sistema
       ├── config.py                 wiki.toml: voci, predefiniti, lettura e scrittura
-      └── apphome.py                cartella dell'app, registro degli spazi
+      ├── apphome.py                cartella dell'app, registro degli spazi
+      └── icon.py                   l'icona: area di notifica, finestra, eseguibile
  web/index.html                     l'interfaccia: una pagina, senza dipendenze né build
 ```
 
@@ -142,7 +143,8 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 Lo script, nell'ordine:
 
 1. `uv sync`;
-2. genera l'icona (`packaging/llmwiki.ico`) dal disegno in `desktop.py`;
+2. genera l'icona (`packaging/llmwiki.ico`) dal disegno in `icon.py`, lo stesso che il server
+   usa come favicon della finestra e l'app per l'area di notifica;
 3. PyInstaller con `packaging/llmwiki.spec`: due eseguibili nella stessa cartella,
    `LLMWiki.exe` (senza console) e `llmwiki-cli.exe` (riga di comando);
 4. copia `LEGGIMI.txt` e l'elenco delle licenze;

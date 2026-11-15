@@ -211,6 +211,19 @@ def test_secret_is_kept_outside_the_space(tmp_path, monkeypatch):
         save_secret("PATH", "x")
 
 
+def test_window_icon_is_served_to_everyone(tmp_path):
+    """Senza favicon la finestra (un browser in modalità app) prende l'icona del browser."""
+    cfg = mock_cfg(tmp_path)
+    cfg.server.users = {"anna": "tok-1"}
+    remote = {"base_url": "http://192.168.1.20:8765", "client": ("192.168.1.30", 50000)}
+    with TestClient(create_app(Wiki(cfg)), **remote) as client:
+        ico = client.get("/favicon.ico")
+        assert ico.status_code == 200 and ico.content[:4] == b"\x00\x00\x01\x00"
+        png = client.get("/icon.png")
+        assert png.status_code == 200 and png.content[:8] == b"\x89PNG\r\n\x1a\n"
+        assert 'rel="icon"' in client.get("/").text
+
+
 def test_reading_controls_and_reader_from_the_api(tmp_path):
     """Ferma e Riprendi dal computer dell'app; la scheda dice chi l'ha scritta e in quanto."""
     cfg = mock_cfg(tmp_path)

@@ -9,6 +9,8 @@ Per chi la usa:
   messo. Un tasto "Ferma la lettura" la interrompe, "Riprendi" la fa ripartire.
 - Ogni documento ricorda quale modello l'ha letto, in quanto tempo e quando: lo dice la sua
   scheda in Documenti.
+- La finestra di LLMWiki ha la sua icona, anche nella barra delle applicazioni: prima
+  mostrava quella del browser.
 - Due avvii a pochi secondi di distanza (l'installatore e un doppio clic) non danno più
   l'errore "il server interno non è partito": la seconda copia aspetta la prima e la porta in
   primo piano.
@@ -19,6 +21,8 @@ Per chi sviluppa:
   `/api/admin/index/pause` e `/resume`; `status()` aggiunge `reading`, `last_done`, `paused`,
   `reader`. Colonne `model`, `seconds`, `read_at` in `docs`, aggiunte anche ai database
   esistenti (`Store._add_columns`, primo aggiornamento dello schema).
+- `icon.py`: unica fonte dell'icona (prima in `desktop.py`); il server la serve come
+  `/favicon.ico` e `/icon.png`, pubbliche.
 - `desktop._claim_instance()`: lucchetto su `llmwiki.lock` per una sola copia. Test:
   `test_second_launch_while_the_first_is_starting_does_not_fail`.
 

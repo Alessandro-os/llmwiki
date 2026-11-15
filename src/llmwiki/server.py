@@ -21,13 +21,14 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import __version__
 from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, save_secret
 from .config import LOOPBACK, Config
 from .extract import SUPPORTED
+from .icon import icon_bytes
 from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
 from .store import norm_path
@@ -35,7 +36,7 @@ from .tools import ToolError
 
 log = logging.getLogger("llmwiki.server")
 WEB_DIR = Path(__file__).parent / "web"
-PUBLIC_PATHS = {"/", "/favicon.ico"}
+PUBLIC_PATHS = {"/", "/favicon.ico", "/icon.png"}
 # Le impostazioni che si possono cambiare dall'interfaccia; le altre solo a mano nel file.
 EDITABLE = {
     "llm": {"provider", "base_url", "api_key_env", "agent_model", "summary_model", "judge_model",
@@ -160,6 +161,16 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
     @app.get("/", response_class=HTMLResponse)
     async def index() -> str:
         return (WEB_DIR / "index.html").read_text(encoding="utf-8")
+
+    # L'icona della finestra: la finestra è un browser in modalità app, e senza favicon Windows
+    # le dà l'icona del browser anche nella barra delle applicazioni.
+    @app.get("/favicon.ico")
+    async def favicon() -> Response:
+        return Response(icon_bytes("ico"), media_type="image/x-icon")
+
+    @app.get("/icon.png")
+    async def icon_png() -> Response:
+        return Response(icon_bytes("png"), media_type="image/png")
 
     @app.get("/api/status")
     async def status(request: Request) -> dict:

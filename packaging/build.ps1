@@ -9,7 +9,7 @@ Set-Location -LiteralPath $root
 
 uv sync
 if ($LASTEXITCODE) { throw "uv sync non riuscito" }
-uv run python -c "from llmwiki.desktop import make_icon; make_icon(256).save('packaging/llmwiki.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(256,256)])"
+uv run python -c "from llmwiki.icon import icon_bytes; open('packaging/llmwiki.ico', 'wb').write(icon_bytes('ico'))"
 if ($LASTEXITCODE) { throw "icona non generata" }
 
 uv run pyinstaller packaging\llmwiki.spec --noconfirm --clean --distpath dist --workpath build\pyinstaller
