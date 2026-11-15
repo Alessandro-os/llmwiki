@@ -1,6 +1,6 @@
 # Cronologia delle versioni
 
-## Prossima versione
+## 0.4.1 · 2026-11-15
 
 Per chi la usa:
 

@@ -163,5 +163,5 @@ Il numero di versione sta in due posti da tenere uguali: `pyproject.toml` e
 usa" e "per chi sviluppa". Le cose in sospeso stanno in `DA_FARE.md`.
 
 Il progetto sta su GitHub in un repository privato, `Alessandro-os/llmwiki`. Ogni versione ha
-la sua etichetta (`v0.4.0`) e una release con l'installatore e lo zip.
+la sua etichetta (`v0.4.1`) e una release con l'installatore e lo zip.
 `.github/workflows/ci.yml` esegue lint e test a ogni caricamento.
