@@ -28,6 +28,7 @@ sopra.
       ├── extract.py                da file a righe numerate
       ├── prompts.py                tutti i prompt di sistema
       ├── config.py                 wiki.toml: voci, predefiniti, lettura e scrittura
+      ├── update.py ── download.py  aggiornamenti da GitHub · scaricamento verificato (anche nli.py)
       ├── apphome.py                cartella dell'app, registro degli spazi
       └── icon.py                   l'icona: area di notifica, finestra, eseguibile
  web/index.html                     l'interfaccia: una pagina, senza dipendenze né build
@@ -86,6 +87,7 @@ spazi veri.
 | `test_backends.py` | I due protocolli contro server finti: strumenti, giudice senza logprob, parametri facoltativi rifiutati da Claude, server spento non scambiato per server senza logprob |
 | `test_independence.py` | Modello che rifiuta o ignora gli strumenti, modalità testuale forzata, contesto piccolo, lettura che aspetta il modello invece di fallire, chiave sbagliata segnalata senza riprovare all'infinito |
 | `test_app.py` | Configurazione, spazi, persone e impostazioni dall'interfaccia, qualunque fornitore, avanzamento in diretta, cronologia e approfondimenti, amministrazione solo locale, chiavi fuori dallo spazio, cascata del decision model |
+| `test_update.py` | Aggiornamenti contro un GitHub finto: versione nuova, nessuna novità, rete assente, impronta sbagliata (file cancellato, niente installazione), pulizia degli installatori usati |
 | `test_evals.py` | Coerenza dei file del banco di prova; il decision model mantiene la qualità misurata (se installato) |
 
 ## 9.4 Banco di prova

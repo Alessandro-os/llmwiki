@@ -65,6 +65,9 @@ una finestra propria, senza barra degli indirizzi.
 Il controllo al punto 3 esiste perché su alcuni computer un browser parte e si chiude subito
 senza aprire nulla.
 
+L'icona della finestra, anche nella barra delle applicazioni, viene dalla pagina
+(`/favicon.ico`, disegnata da `icon.py`): senza, Windows mostrerebbe quella del browser.
+
 ## 7.4 L'interfaccia
 
 Tre sezioni nella barra laterale, il menu degli spazi in alto, lo stato della lettura in
@@ -73,7 +76,8 @@ basso (aggiornato ogni 3 secondi).
 **Chiedi.** Campo della domanda, passi dell'agente mentre lavora, pulsante Ferma. Nella
 risposta ogni citazione è un bottone con il suo segno (`1 ✓`, `2 ⚠`); cliccandolo si apre un
 pannello con ciò che la risposta afferma, ciò che dice il documento e l'esito, più "Apri il
-documento in questo punto". "Nuova conversazione" ricomincia da capo.
+documento in questo punto". "Nuova conversazione" ricomincia da capo. Sotto il campo, a
+destra, compare "È disponibile la versione … · Aggiorna" quando c'è una versione nuova (7.8).
 
 **Documenti.** Area in cui trascinare i file (o sceglierli dal computer), con la cartella di
 destinazione. Sotto, l'esplorazione dello spazio: cartelle, mappa, sintesi, scheda di ogni
@@ -119,6 +123,7 @@ Documenti\LLMWiki\Personale\
 ├── llmwiki.lock       tenuto dalla copia aperta, perché non ne parta una seconda
 ├── secrets.json       chiavi dei servizi online
 ├── models\mdeberta-v3-nli\   decision model (model.onnx, tokenizer.json)
+├── aggiornamenti\     installatore della versione nuova, finché non è installata
 └── logs\llmwiki.log
 ```
 
@@ -140,3 +145,22 @@ restano.
 In alternativa c'è lo zip: si estrae dove si vuole e si apre `LLMWiki.exe`.
 
 Senza firma del codice, al primo avvio su un altro PC Windows mostra l'avviso SmartScreen.
+
+## 7.8 Aggiornamenti
+
+A ogni avvio l'app desktop chiede a GitHub, in sottofondo, l'ultima versione pubblicata di
+`Alessandro-os/llmwiki` (`update.py`). Se è più nuova di quella installata, sotto il campo della
+domanda, a destra, compare "È disponibile la versione … · Aggiorna" (solo dal computer
+dell'app). Premendolo, e confermando:
+
+1. scarica `LLMWiki-<versione>-setup.exe` in `%LOCALAPPDATA%\LLMWiki\aggiornamenti`,
+   riprendendo da dove si era fermato se la rete cade;
+2. ne controlla l'impronta SHA-256 con quella pubblicata da GitHub. Se è diversa cancella il
+   file e non installa niente;
+3. avvia l'installatore senza finestre e si chiude;
+4. l'installatore toglie la cartella dei componenti della versione vecchia (`_internal`),
+   copia la nuova e riapre l'app;
+5. al primo avvio la versione nuova cancella l'installatore scaricato.
+
+Documenti, spazi, impostazioni, chiavi e decision model non si toccano. Senza rete, o se
+GitHub non risponde, il tasto non compare e non c'è nessun messaggio di errore.

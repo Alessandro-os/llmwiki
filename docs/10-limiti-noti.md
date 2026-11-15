@@ -50,5 +50,7 @@ Che cosa l'app non fa o non garantisce nella versione 0.4.1. Gli sviluppi possib
 ## Distribuzione
 
 - **Eseguibile non firmato:** su altri PC Windows mostra l'avviso SmartScreen al primo avvio.
-- **Nessun aggiornamento automatico:** una versione nuova si installa sopra la precedente.
-- **Licenza del software non ancora scelta.**
+- **Aggiornamento solo su richiesta e solo nell'app desktop per Windows:** l'app avvisa ma non
+  si aggiorna da sola. Il controllo dipende da GitHub: senza rete, o se il repository
+  `Alessandro-os/llmwiki` non è pubblico, il tasto non compare.
+- **Licenza del software non ancora scelta**, anche se il repository è pubblico.

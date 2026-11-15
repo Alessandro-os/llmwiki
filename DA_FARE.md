@@ -6,8 +6,9 @@ decisione; quelle in basso sono sviluppi possibili.
 ## Aspettano te
 
 - [ ] **Scegliere la licenza del software** (per esempio MIT se vuoi che chiunque possa usarlo,
-  oppure nessuna licenza se resta tuo). Finché non c'è, è meglio non distribuirlo fuori dalla
-  cerchia di chi lo sta provando. Vedi `LICENSES.md` per i componenti di terze parti.
+  oppure nessuna licenza se resta tuo). Il repository ora è pubblico: senza licenza chiunque
+  può leggere il codice ma nessuno ha il diritto di riusarlo. Vedi `LICENSES.md` per i
+  componenti di terze parti. Nota: nei commit pubblici si vede il tuo indirizzo email.
 - [ ] **Firma dell'eseguibile.** Senza un certificato di firma del codice, sugli altri PC
   Windows mostra l'avviso SmartScreen al primo avvio. Il certificato si compra da un'autorità
   di certificazione; serve solo se lo distribuisci a persone che non ti conoscono.
@@ -83,4 +84,3 @@ In ordine di importanza, secondo me.
 - [ ] Modalità "interrogami": l'app genera domande dagli appunti di una cartella e controlla
   le tue risposte sui testi.
 - [ ] OCR per i PDF scansionati (oggi vengono segnalati come non leggibili).
-- [ ] Aggiornamento automatico dell'app quando esce una versione nuova.

@@ -15,7 +15,6 @@ nella verifica è il primo filtro di una cascata, non l'unico giudice.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import re
@@ -23,6 +22,7 @@ import threading
 from pathlib import Path
 
 from . import apphome
+from .download import fetch_verified
 
 REPO = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
 REVISION = "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
@@ -110,30 +110,8 @@ class Download:
 
     def _fetch(self, http, remote: str, target: Path, size: int, sha: str, base: int) -> None:
         url = f"https://huggingface.co/{REPO}/resolve/{REVISION}/{remote}"
-        part = target.with_name(target.name + ".part")
-        offset = part.stat().st_size if part.exists() else 0
-        if offset > size:
-            part.unlink()
-            offset = 0
-        headers = {"Range": f"bytes={offset}-"} if offset else {}
-        with http.stream("GET", url, headers=headers) as response:
-            if offset and response.status_code != 206:
-                offset = 0  # il server non riprende: si ricomincia
-            response.raise_for_status()
-            with part.open("ab" if offset else "wb") as handle:
-                done = offset
-                for block in response.iter_bytes(1 << 20):
-                    handle.write(block)
-                    done += len(block)
-                    self.state["done"] = base + done
-        digest = hashlib.sha256()
-        with part.open("rb") as handle:
-            for block in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(block)
-        if digest.hexdigest() != sha:
-            part.unlink()
-            raise RuntimeError(f"{target.name}: file scaricato corrotto (sha256 diverso), riprova")
-        os.replace(part, target)
+        fetch_verified(http, url, target, size, sha,
+                       lambda done: self.state.__setitem__("done", base + done))
 
 
 class NliJudge:

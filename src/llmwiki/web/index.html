@@ -81,6 +81,7 @@
   form#ask { padding: 14px clamp(16px, 4vw, 44px) 20px; }
   form#ask > div { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
   form#ask textarea { resize: none; min-height: 48px; }
+  form#ask > #updateRow { margin-top: 8px; justify-content: flex-end; } #updateRow[hidden] { display: none; }
   .topbar { display: flex; justify-content: flex-end; gap: 8px; padding: 10px clamp(16px, 4vw, 44px) 0; min-height: 10px; }
 
   /* fonte */
@@ -128,7 +129,7 @@
     <form id="ask"><div>
       <textarea id="question" rows="1" aria-label="La tua domanda" placeholder="Scrivi una domanda sui tuoi documenti…"></textarea>
       <button class="primary" id="send">Chiedi</button>
-    </div></form>
+    </div><div id="updateRow" class="small" hidden></div></form>
   </section>
   <section id="docs" class="view"><div class="page">
     <h2>Documenti</h2>
@@ -222,6 +223,22 @@ function readingHtml(reading, queue) {
   html += '<span class="muted">Modello: ' + esc(S.reader) + (others > 0 ? " · in coda altri " + others : "") + "</span>";
   return html + (S.local ? '<button data-read="pause">Ferma la lettura</button>' : "");
 }
+// Aggiornamento dell'app: il tasto compare solo se GitHub ha una versione più nuova.
+function renderUpdate(u) {
+  const row = $("updateRow"), v = esc(u && u.version);
+  row.hidden = !u || u.status === "none";
+  if (row.hidden) return;
+  const pct = u.total ? Math.round(100 * u.done / u.total) : 0;
+  row.innerHTML = u.status === "available" ? '<button type="button" class="link" data-update>È disponibile la versione ' + v + " · Aggiorna</button>"
+    : u.status === "downloading" ? "Scarico la versione " + v + "… " + pct + "%"
+    : u.status === "installing" ? "Installo la versione " + v + ": LLMWiki si chiude e si riapre da sola."
+    : '<span class="warn">Aggiornamento non riuscito: ' + esc(u.error) + '</span> <button type="button" class="link" data-update>Riprova</button>';
+}
+$("updateRow").addEventListener("click", async (event) => {
+  if (!event.target.closest("[data-update]")) return;
+  if (!confirm("Scarico e installo la versione " + S.update.version + "? LLMWiki si chiude e si riapre da sola; documenti, spazi e impostazioni restano.")) return;
+  try { renderUpdate(await post("/api/admin/update")); } catch (error) { alert(error.message); }
+});
 $("statusBox").addEventListener("click", async (event) => {
   const action = event.target.dataset.read; if (!action) return;
   event.target.disabled = true;
@@ -250,6 +267,7 @@ async function refreshStatus() {
   if (S.error) html += '<span class="warn">' + S.error + (S.error === 1 ? " file non letto" : " file non letti") + (S.local ? ' · <button class="link" data-go="settings">vedi</button>' : "") + "</span>";
   if (S.provider === "mock") html += '<span class="muted">Modalità demo</span>';
   $("statusBox").innerHTML = html;
+  renderUpdate(S.update);
   if (!chat.length && !running) renderWelcome();
   if (wasBusy && !S.busy && $("docs").classList.contains("on")) explore($("browser").dataset.folder || "");
   wasBusy = S.busy;

@@ -53,6 +53,11 @@ DOVE STANNO I DATI
 - Impostazioni dell'app, chiavi, verificatore e log: %LOCALAPPDATA%\LLMWiki
 La disinstallazione toglie il programma e lascia intatti documenti e spazi.
 
+AGGIORNARE
+Quando esce una versione nuova, in basso a destra nella pagina principale compare
+"È disponibile la versione ... · Aggiorna". Premendolo l'app scarica la versione nuova,
+la controlla, si chiude e si riapre aggiornata. Documenti, spazi e impostazioni restano.
+
 CHIUDERE
 Chiudere la finestra non ferma l'app (così la lettura dei documenti continua): per chiuderla
 usa l'icona vicino all'orologio > Esci, oppure Impostazioni > Chiudi LLMWiki.

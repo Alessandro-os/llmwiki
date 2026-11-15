@@ -186,6 +186,8 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
             active = hub.registry.active()
             info["space"] = active["id"] if active else ""
             info["spaces"] = [{"id": s["id"], "name": s["name"]} for s in hub.registry.spaces]
+        if hub.updater is not None and request.state.local:
+            info["update"] = hub.updater.status()
         return info
 
     @app.get("/api/folder")
@@ -419,7 +421,7 @@ def _admin_routes(app: FastAPI, hub: Hub) -> None:
 
 
 def _reading_routes(app: FastAPI, hub: Hub) -> None:
-    """Fermare e riprendere la lettura dei documenti: solo dal computer dell'app."""
+    """Fermare e riprendere la lettura, aggiornare l'app: solo dal computer dell'app."""
 
     @app.post("/api/admin/index/pause")
     async def pause_reading() -> dict:
@@ -430,6 +432,14 @@ def _reading_routes(app: FastAPI, hub: Hub) -> None:
     async def resume_reading() -> dict:
         hub.wiki.indexer.resume()
         return hub.wiki.indexer.status()
+
+    @app.post("/api/admin/update")
+    async def update_app() -> dict:
+        """Scarica e installa la versione nuova; poi l'app si chiude e l'installatore la riapre."""
+        if hub.updater is None or hub.quit is None:
+            raise ValueError("l'aggiornamento è disponibile solo nell'app desktop")
+        hub.updater.start(hub.quit)
+        return hub.updater.status()
 
 
 def create_app(wiki_or_hub: Wiki | Hub) -> FastAPI:

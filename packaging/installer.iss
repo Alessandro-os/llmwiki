@@ -39,6 +39,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Crea un'icona sul desktop"; GroupDescription: "Icone:"
 Name: "autostart"; Description: "Avvia LLMWiki all'accensione del computer (resta nell'area di notifica)"; GroupDescription: "Avvio:"; Flags: unchecked
 
+[InstallDelete]
+; Prima di copiare la versione nuova si toglie la cartella dei componenti della vecchia: non
+; restano file che la nuova non usa piu'. Documenti, spazi e impostazioni stanno altrove.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "..\dist\LLMWiki\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
@@ -50,3 +55,5 @@ Name: "{userstartup}\LLMWiki"; Filename: "{app}\LLMWiki.exe"; Parameters: "--no-
 
 [Run]
 Filename: "{app}\LLMWiki.exe"; Description: "Avvia LLMWiki"; Flags: nowait postinstall skipifsilent
+; Aggiornamento dall'app (installazione silenziosa): l'app si era chiusa e si riapre da sola.
+Filename: "{app}\LLMWiki.exe"; Flags: nowait skipifnotsilent

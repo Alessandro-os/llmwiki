@@ -23,6 +23,7 @@ import uvicorn
 
 from . import __version__, apphome
 from .icon import make_icon
+from .update import Updater
 from .app import Hub, Wiki, detect_local_servers, load_secrets, use_local_server
 from .config import LOOPBACK, Config
 from .server import create_app
@@ -290,6 +291,8 @@ def _main(argv: list[str] | None = None) -> int:
         stop.set()
 
     hub.quit = quit_app
+    hub.updater = Updater()
+    hub.updater.check_in_background()  # se c'è una versione nuova, compare il tasto Aggiorna
     thread = threading.Thread(target=server.run, name="llmwiki-server", daemon=True)
     thread.start()
     deadline = time.time() + 40

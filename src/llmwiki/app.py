@@ -158,6 +158,7 @@ class Hub:
         self._lock = asyncio.Lock()
         self._running = False
         self.quit = None  # impostata dall'app desktop: chiude l'applicazione
+        self.updater = None  # solo nell'app desktop: aggiornamenti da GitHub (update.Updater)
 
     async def start(self) -> None:
         self._running = True
