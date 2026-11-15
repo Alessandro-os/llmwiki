@@ -73,6 +73,17 @@ def test_server_ocr_reads_and_reports_problems_like_a_model():
     assert not rejected.value.unavailable
 
 
+def test_layout_coordinates_are_removed():
+    """Uscite vere di Unlimited OCR 2 (misura del 16/11) e il formato di DeepSeek-OCR."""
+    unlimited = ("text[45, 79, 512, 133]Meccanica applicata alle macchine - Lezione 7\n"
+                 "text[47, 284, 606, 343]Il rendimento è $\\eta = 1 - T_2/T_1$ e non dipende dal fluido.")
+    assert ocr.clean_text(unlimited) == ("Meccanica applicata alle macchine - Lezione 7\n"
+                                         "Il rendimento è $\\eta = 1 - T_2/T_1$ e non dipende dal fluido.")
+    deepseek = "<|ref|>title<|/ref|><|det|>[[10, 20, 300, 60]]<|/det|>\nCiclo di Carnot"
+    assert ocr.clean_text(deepseek) == "Ciclo di Carnot"
+    assert ocr.clean_text("Il vettore v[1, 2, 3, 4] resta") == "Il vettore v[1, 2, 3, 4] resta"
+
+
 def test_probe_accepts_only_an_ocr_that_really_reads():
     assert probe(ServerOcr("http://ocr.test/v1", "vede", transport=vision_server()))["ok"]
     blind = probe(ServerOcr("http://ocr.test/v1", "cieco", transport=vision_server(sees=False)))

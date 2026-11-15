@@ -142,6 +142,24 @@ risposte su quell'indice:
 | Qwen3.6-35B-A3B | 61 min | 23/24 · 44 s |
 | Qwen3.5-9B | 80 min | 24/24 · 55 s |
 
+### Confronto degli OCR (2026-11-16)
+
+Una pagina di appunti con testo noto: italiano con accenti e formule (η, ΔU, ∮ δQ/T, ω = 2πn/60,
+pedici). Due versioni: pulita, e "da scanner" (storta di 1,2°, sfocata, con rumore). RTX 3080 Ti
+12 GB. Somiglianza al testo vero dopo aver tolto le coordinate dei riquadri; le formule scritte in
+LaTeX (`$\eta = 1 - T_2/T_1$`) contano come differenze, anche se sono giuste.
+
+| OCR | Somiglianza (pulita / scanner) | Accenti | Simboli | Secondi a pagina | Memoria scheda video |
+|---|---|---|---|---|---|
+| Tesseract 5.4, solo inglese | 0,957 / 0,957 | 1 su 3 | 0 su 6 | 0,3 | nessuna |
+| Strata IQ2_XS con la vista (stesso modello delle risposte) | 0,928 / 0,928 | 3 su 3 | 6 su 6 | 5 | già caricato |
+| Unlimited OCR 2, transformers su Windows | 0,928 / 0,928 | 3 su 3 | 6 su 6 | 24 | 7,4 GB (Strata spento) |
+
+Unlimited OCR 2 gira su Windows anche senza Triton (lo usa solo se c'è), ma con transformers è
+lento: SGLang, consigliato da Baidu, è documentato solo su Linux. Non entra nella scheda insieme a
+Strata (11,4 GB). Su questo PC Strata legge le pagine come Unlimited OCR, 5 volte più in fretta e
+senza memoria in più. Non misurati: scrittura a mano, tabelle, pagine di libro lunghe.
+
 ## Dove stanno i dati
 
 ```

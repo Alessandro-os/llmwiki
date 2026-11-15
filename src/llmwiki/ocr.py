@@ -19,6 +19,7 @@ import base64
 import io
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -89,10 +90,21 @@ class ServerOcr(Ocr):
             content = response.json()["choices"][0]["message"].get("content") or ""
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise OcrError("l'OCR ha risposto in un formato che non conosco") from exc
-        return strip_thinking(content)
+        return clean_text(strip_thinking(content))
 
     def close(self) -> None:
         self._http.close()
+
+
+# Gli OCR "di layout" scrivono dove sta ogni blocco: Unlimited OCR `text[45, 79, 512, 133]Testo`,
+# DeepSeek-OCR `<|ref|>text<|/ref|><|det|>[[45, 79, 512, 133]]<|/det|>`. Per citare serve solo
+# il testo: con le coordinate la somiglianza al testo vero scendeva da 0,93 a 0,78 (misura 16/11).
+_BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>", re.S)
+_BOX_PREFIX = re.compile(r"^[a-z_]+\[\d+(?:,\s*\d+){3}\]", re.M)
+
+
+def clean_text(text: str) -> str:
+    return _BOX_PREFIX.sub("", _BOX_TAGS.sub("", text)).strip()
 
 
 class TesseractOcr(Ocr):
