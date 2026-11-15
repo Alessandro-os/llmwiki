@@ -66,6 +66,43 @@ def _alive(port: int) -> bool:
     return isinstance(data, dict) and "version" in data
 
 
+def _claim_instance():
+    """Una sola copia dell'app per volta. La prima prende un lucchetto su un file e lo tiene
+    finché resta aperta (lo libera Windows alla chiusura, anche se si blocca). Il controllo della
+    porta da solo non basta: due avvii a pochi secondi (installatore e doppio clic) la trovano
+    entrambi libera e il secondo fallisce. Restituisce il file da tenere aperto, o None."""
+    handle = open(apphome.home() / "llmwiki.lock", "a+")  # noqa: SIM115 - resta aperto apposta
+    handle.seek(0)
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
+def _wait_for_other(fixed_port: int | None, no_window: bool) -> int:
+    """Un'altra copia sta partendo: si aspetta che risponda e si porta in primo piano quella."""
+    deadline = time.time() + 40
+    while time.time() < deadline:
+        # senza --port la prima copia può aver cambiato porta (se era occupata) e l'ha salvata
+        port = fixed_port or int(apphome.Registry().data.get("port") or 8765)
+        if _alive(port):
+            if not no_window:
+                open_window(f"http://127.0.0.1:{port}")
+            return 0
+        time.sleep(0.3)
+    log.warning("un'altra copia di LLMWiki tiene il posto ma non risponde")
+    return 0
+
+
 def _free_port(preferred: int) -> int:
     for port in (preferred, 0):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
@@ -244,6 +281,9 @@ def _main(argv: list[str] | None = None) -> int:
         if not args.no_window:
             open_window(f"http://127.0.0.1:{port}")
         return 0
+    instance = _claim_instance()
+    if instance is None:
+        return _wait_for_other(args.port, args.no_window)
 
     if not registry.spaces:
         _first_run(registry)

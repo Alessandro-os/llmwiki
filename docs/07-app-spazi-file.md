@@ -11,7 +11,10 @@
 2. **Chiavi.** Carica le chiavi salvate in `secrets.json`.
 3. **Registro degli spazi.** Legge `app.json`: spazi conosciuti, spazio attivo, porta.
 4. **È già aperta?** Chiede `/api/status` sulla porta salvata. Se risponde LLMWiki, porta in
-   primo piano la finestra esistente e termina: non partono mai due copie.
+   primo piano la finestra esistente e termina. Se non risponde ancora ma un'altra copia sta
+   partendo in quel momento (per esempio l'installatore e un doppio clic insieme), lo capisce
+   dal lucchetto sul file `llmwiki.lock`: aspetta che l'altra risponda, la porta in primo
+   piano e termina. Non partono mai due copie.
 5. **Primo avvio** (nessuno spazio): vedi 7.2.
 6. **Apre lo spazio attivo.** Se la sua cartella è stata spostata o cancellata, apre il primo
    degli altri spazi che funziona e lo rende attivo. Se non se ne apre nessuno, mostra un
@@ -113,6 +116,7 @@ Documenti\LLMWiki\Personale\
 ```
 %LOCALAPPDATA%\LLMWiki\
 ├── app.json           elenco degli spazi, spazio attivo, porta
+├── llmwiki.lock       tenuto dalla copia aperta, perché non ne parta una seconda
 ├── secrets.json       chiavi dei servizi online
 ├── models\mdeberta-v3-nli\   decision model (model.onnx, tokenizer.json)
 └── logs\llmwiki.log

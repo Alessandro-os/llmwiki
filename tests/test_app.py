@@ -211,6 +211,25 @@ def test_secret_is_kept_outside_the_space(tmp_path, monkeypatch):
         save_secret("PATH", "x")
 
 
+def test_second_launch_while_the_first_is_starting_does_not_fail(monkeypatch):
+    """Installatore e doppio clic insieme: la seconda copia parte quando la prima non risponde
+    ancora. Deve aspettarla e uscire senza errori, non contenderle la porta."""
+    from llmwiki import desktop
+
+    first = desktop._claim_instance()
+    assert first is not None
+    answers = iter([False, False, True])  # la prima copia risponde dopo un po'
+    monkeypatch.setattr(desktop, "_alive", lambda port: next(answers, True))
+    monkeypatch.setattr(desktop, "_setup_logging", lambda: None)
+    monkeypatch.setattr(desktop, "_open_hub", lambda registry: pytest.fail("non deve aprire uno spazio"))
+    assert desktop._main(["--no-window", "--no-tray"]) == 0
+    assert desktop._claim_instance() is None  # finché la prima è aperta, il posto è suo
+    first.close()
+    again = desktop._claim_instance()
+    assert again is not None
+    again.close()
+
+
 def test_unreadable_decision_model_does_not_block_the_app(tmp_path, monkeypatch):
     """Un modello che Windows non lascia leggere (WinError 448 su un collegamento di cartella,
     capitato davvero all'avvio dall'installatore) non deve impedire di aprire lo spazio: si

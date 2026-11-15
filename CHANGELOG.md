@@ -1,5 +1,18 @@
 # Cronologia delle versioni
 
+## Prossima versione
+
+Per chi la usa:
+
+- Due avvii a pochi secondi di distanza (l'installatore e un doppio clic) non danno più
+  l'errore "il server interno non è partito": la seconda copia aspetta la prima e la porta in
+  primo piano.
+
+Per chi sviluppa:
+
+- `desktop._claim_instance()`: lucchetto su `llmwiki.lock` per una sola copia. Test:
+  `test_second_launch_while_the_first_is_starting_does_not_fail`.
+
 ## 0.4.1 · 2026-11-15
 
 Per chi la usa:
