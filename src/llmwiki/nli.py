@@ -16,6 +16,7 @@ nella verifica è il primo filtro di una cascata, non l'unico giudice.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import threading
@@ -43,15 +44,24 @@ WINDOW_TOKENS = 200
 MAX_GROUPS = 240
 BATCH = 16
 
+log = logging.getLogger(__name__)
+
 
 def model_dir() -> Path:
     return apphome.models_dir() / NAME
 
 
 def installed(directory: Path | None = None) -> bool:
+    """Un modello presente ma illeggibile (permessi, disco staccato, un collegamento di cartella
+    che Windows rifiuta: WinError 448) conta come assente. Così l'app si apre comunque e
+    verifica con il modello linguistico, invece di non partire."""
     directory = directory or model_dir()
-    return all((directory / name).is_file() and (directory / name).stat().st_size == size
-               for name, (_, size, _) in FILES.items())
+    try:
+        return all((directory / name).is_file() and (directory / name).stat().st_size == size
+                   for name, (_, size, _) in FILES.items())
+    except OSError as exc:
+        log.warning("decision model in %s non leggibile: %s", directory, exc)
+        return False
 
 
 class Download:

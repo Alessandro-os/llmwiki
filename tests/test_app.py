@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -208,6 +209,29 @@ def test_secret_is_kept_outside_the_space(tmp_path, monkeypatch):
     assert (apphome.home() / "secrets.json").exists()
     with pytest.raises(ValueError):
         save_secret("PATH", "x")
+
+
+def test_unreadable_decision_model_does_not_block_the_app(tmp_path, monkeypatch):
+    """Un modello che Windows non lascia leggere (WinError 448 su un collegamento di cartella,
+    capitato davvero all'avvio dall'installatore) non deve impedire di aprire lo spazio: si
+    verifica con il modello linguistico."""
+    real_is_file = Path.is_file
+
+    def is_file(self):
+        if nli.NAME in self.parts:
+            raise OSError(448, "punto di montaggio non attendibile", str(self))
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", is_file)
+    assert not nli.installed()
+
+    async def scenario():
+        hub = Hub(Wiki(Config.from_dict({"llm": {"provider": "mock"}}, tmp_path)))
+        assert hub.wiki.agent.verifier.judge_name == "llm"
+        assert hub.download.status()["status"] == "missing"
+        await hub.wiki.aclose()
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.skipif(not nli.installed(REAL_MODEL_DIR), reason="decision model non installato")

@@ -1,5 +1,17 @@
 # Cronologia delle versioni
 
+## Prossima versione
+
+Per chi la usa:
+
+- Se il verificatore delle citazioni c'è ma non si può leggere, l'app si apre lo stesso e
+  verifica con il modello. Prima non partiva affatto ("nessuno spazio si apre", errore 448).
+
+Per chi sviluppa:
+
+- `nli.installed()` tratta un `OSError` come modello assente e lo scrive nel log. Test:
+  `test_unreadable_decision_model_does_not_block_the_app`.
+
 ## 0.4.0 · 2026-11-14
 
 Per chi la usa:

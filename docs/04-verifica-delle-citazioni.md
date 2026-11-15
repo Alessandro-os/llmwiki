@@ -168,6 +168,12 @@ Il decision model si scarica una volta (1,1 GB) dal primo avvio o da Impostazion
 scaricamento riprende da dove si era interrotto e ogni file è controllato con la sua impronta
 SHA-256 prima di essere usato. Appena è completo entra in uso, senza riavviare.
 
+Un decision model presente ma illeggibile conta come assente: l'app si apre lo stesso e
+verifica con il sì/no del modello. Succede per esempio con permessi sbagliati, o con un
+collegamento di cartella che Windows rifiuta di attraversare (errore 448). Il motivo resta
+nel log. Se la cartella `models` deve stare altrove, conviene collegare i due file (hard
+link) e non la cartella.
+
 Con `verify.enabled = false` la verifica non parte e le citazioni restano senza esito.
 
 ## 4.6 Che cosa la verifica non garantisce
