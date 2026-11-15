@@ -91,10 +91,44 @@ def _matches(text: str, needle: str) -> bool:
     return any(option.lower() in text.lower() for option in needle.split("|"))
 
 
+class Probe:
+    """Raccoglie gli eventi di una risposta: dove va il tempo e quanto lavora l'agente."""
+
+    def __init__(self) -> None:
+        self.started = time.time()
+        self.verify_started: float | None = None
+        self.steps = self.explorer_steps = self.delegates = 0
+
+    def __call__(self, event: dict) -> None:
+        if event.get("type") == "verifying":
+            self.verify_started = time.time()
+        elif event.get("type") == "step":
+            if event.get("explorer"):
+                self.explorer_steps += 1
+            else:
+                self.steps += 1
+                self.delegates += event.get("tool") == "delegate"
+
+    def to_dict(self) -> dict:
+        end = time.time()
+        verify = end - self.verify_started if self.verify_started else 0.0
+        return {"seconds": end - self.started, "verify_seconds": round(verify, 1),
+                "steps": self.steps, "explorer_steps": self.explorer_steps, "delegates": self.delegates}
+
+
+def _settings(cfg: Config) -> dict:
+    """Le scelte che distinguono una combinazione dall'altra, salvate accanto ai risultati."""
+    llm = cfg.llm
+    return {"base_url": llm.base_url, "agent_model": llm.agent_model, "summary_model": llm.summary_model,
+            "reasoning": "poco" if llm.send_reasoning_effort else "predefinito", "tool_mode": llm.tool_mode,
+            "context_tokens": llm.context_tokens, "explorers": cfg.agent.explorers,
+            "max_steps": cfg.agent.max_steps, "index_concurrency": cfg.index.concurrency}
+
+
 def cmd_answers(args) -> int:
     load_secrets()
     source = Config.load(args.config)
-    work = HERE / (".work" if args.suite == "esempi" else ".work_difficile")
+    work = HERE / (args.work or (".work" if args.suite == "esempi" else ".work_difficile"))
     docs = work / "documenti"
     if args.fresh and work.exists():
         shutil.rmtree(work)
@@ -110,17 +144,21 @@ def cmd_answers(args) -> int:
     if args.limit:
         questions = questions[: args.limit]
 
+    index: dict = {}
+
     async def run() -> list[dict]:
         wiki = Wiki(cfg)
         started = time.time()
         status = await wiki.indexer.run_once()
+        index.update(seconds=round(time.time() - started), documents=status["ready"],
+                     errors=status["error"], llm_calls=status["llm_calls"] or {})
         print(f"indice: {status['ready']} documenti, {status['nodes']} nodi, {status['error']} errori, "
-              f"{time.time() - started:.0f} s, chiamate {status['llm_calls'] or 'nessuna'}")
+              f"{index['seconds']} s, chiamate {status['llm_calls'] or 'nessuna'}")
         results = []
         for item in questions:
-            started = time.time()
+            probe = Probe()
             try:
-                answer = await wiki.ask(item["question"])
+                answer = await wiki.ask(item["question"], on_event=probe)
             except Exception as exc:
                 results.append({"q": item["question"], "ok": False, "why": [f"errore: {exc}"], "seconds": 0,
                                 "citations": 0, "verified": 0, "warnings": 0})
@@ -134,14 +172,16 @@ def cmd_answers(args) -> int:
             if not item.get("unanswerable") and not answer.citations:
                 why.append("nessuna citazione")
             results.append({
-                "q": item["question"], "ok": not why, "why": why, "seconds": time.time() - started,
+                "q": item["question"], "ok": not why, "why": why, **probe.to_dict(),
                 "citations": len(answer.citations), "warnings": warnings,
                 "verified": sum(c.status == VERIFIED for c in answer.citations),
                 "methods": sorted({c.method for c in answer.citations}),
+                "mode": answer.mode, "chars": len(answer.answer), "answer": answer.answer,
             })
             last = results[-1]
             print(f"{'OK  ' if last['ok'] else 'NO  '} {last['seconds']:4.0f} s · {last['citations']} citazioni "
-                  f"({last['verified']} confermate subito, {warnings} ⚠) · {item['question'][:70]}"
+                  f"({last['verified']} confermate subito, {warnings} ⚠) · passi {last['steps']}"
+                  f"+{last['explorer_steps']} · verifica {last['verify_seconds']:.0f} s · {item['question'][:70]}"
                   + (f"\n      {'; '.join(why)}" if why else ""))
             for c in answer.citations:
                 if c.status == WARNING:  # da leggere a mano: errore dell'agente o verifica troppo severa?
@@ -158,7 +198,8 @@ def cmd_answers(args) -> int:
     print(f"\nrisposte corrette {sum(r['ok'] for r in results)}/{total} · citazioni {cites}, di cui "
           f"confermate subito {sum(r['verified'] for r in results)}, non confermate "
           f"{sum(r['warnings'] for r in results)} · tempo medio {sum(r['seconds'] for r in results) / max(total, 1):.0f} s")
-    (work / "ultimo_risultato.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    report = {"settings": _settings(cfg), "suite": args.suite, "index": index, "answers": results}
+    (work / args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if all(r["ok"] for r in results) else 1
 
 
@@ -225,6 +266,8 @@ def main() -> int:
                            help="esempi: i 10 documenti di examples/docs; difficile: 64 documenti molto simili tra loro")
     p_answers.add_argument("--limit", type=int, default=0)
     p_answers.add_argument("--fresh", action="store_true", help="ricostruisce l'indice da zero")
+    p_answers.add_argument("--work", help="cartella di lavoro dentro evals/ (per confrontare indici diversi)")
+    p_answers.add_argument("--out", default="ultimo_risultato.json", help="file dei risultati nella cartella di lavoro")
     p_scale = sub.add_parser("scale")
     p_scale.add_argument("--docs", type=int, default=2000)
     p_scale.add_argument("--folders", type=int, default=10)

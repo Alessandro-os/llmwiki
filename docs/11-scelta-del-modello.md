@@ -94,9 +94,10 @@ model exceeds the available RAM/VRAM and is using the file tier … pick a small
 5. **Tra le due versioni che entrano è la migliore.** Strata classifica Q2_0 "good" e IQ2_XS
    "better".
 
-Che cosa non si sa: quanto IQ2_XS perda rispetto a IQ3_S sul lavoro vero. Non c'è un numero
-pubblicato per IQ2_XS, e il confronto non è alla pari, perché oggi IQ3_S gira con una parte
-degli esperti saltata. Si misura (passo 5).
+Misurato il 15 novembre (passo 5): sul lavoro vero IQ2_XS non perde nulla di misurabile e
+va molto più in fretta di quanto dica il rapporto tra i token al secondo (93 contro 48 sul
+testo breve): 16 s a risposta contro 186. IQ3_S, che non entra nella RAM, legge esperti
+dall'SSD proprio sulle richieste lunghe dell'agente.
 
 ### Con 64 GB: IQ3_XXS per l'uso di tutti i giorni, IQ3_S a PC libero
 
@@ -118,8 +119,8 @@ riporta un caso vicino a questo: scheda da 12 GB, PC da 63 GB, IQ3_S a 128K pass
 | IQ3_XXS con 48 GB | 53 GB richiesti: stesso problema, più piccolo |
 | Q2_0 | Entra, ma è la versione di qualità più bassa e libera solo 1,5 GB in più di IQ2_XS |
 | Coder IQ1_M | Più debole fuori dal codice e sui testi non inglesi: i documenti sono in italiano |
-| Qwen3.6-35B-A3B in Strata | Su 12 GB gira in modalità ibrida a circa 59 token/s (misura su RTX 3060): più lento di IQ2_XS e più piccolo. Va scaricato |
-| Un modello piccolo tutto nella scheda video (vedi sotto) | La scheda video è occupata da Strata (11,4 GB su 12) e Strata non serve altre famiglie di modelli: servirebbe un secondo programma e spegnere Strata ogni volta. L'ultimo avvio di Strata registrato è durato 1.008 secondi. Il guadagno sarebbe circa 90 token/s contro gli 80 di riferimento di IQ2_XS, con un modello da 9-12 miliardi di parametri al posto di uno molto più grande |
+| Qwen3.6-35B-A3B su llama.cpp | Misurato: 23/24 a 40 s, indice in 61 minuti. Più lento di IQ2_XS sia nelle risposte sia nell'indice, e una ⚠ in più |
+| Un modello piccolo tutto nella scheda video (vedi sotto) | Misurato: Gemma 4 12B e Qwen3.5-9B fanno 24/24, ma rispondono in 26-28 s contro i 16 di IQ2_XS e con risposte più corte. Servono un secondo programma e Strata spento: con Strata già sul PC non conviene |
 
 ## Passo 5: verificare prima di decidere
 
@@ -137,13 +138,47 @@ La scelta è un'ipotesi finché non è misurata. Due prove, prima e dopo il camb
 Se IQ2_XS resta intorno a 22-23 su 24 con pochi ⚠ e tempi più bassi, è la scelta giusta per
 48 GB. Se perde chiaramente, si torna a IQ3_S accettando la RAM piena fino all'arrivo dei 64 GB.
 
+**Esito della prova 1 (15 novembre 2026).** Tutti i modelli hanno risposto sullo stesso
+indice, fatto da IQ3_S; poi ciascuno ha rifatto l'indice da sé. Tabelle complete nel
+[README](../README.md#confronto-dei-modelli-locali-2026-11-15).
+
+| | IQ3_S | IQ2_XS |
+|---|---|---|
+| Risposte giuste (stesso indice) | 24/24 | 24/24 |
+| Tempo medio a risposta | 186 s (98 s senza la domanda senza risposta) | 16 s |
+| Citazioni non confermate | 0 | 0 |
+| Indice di 64 documenti | 47 min | 18 min |
+| Lunghezza media della risposta | 946 caratteri | 488 caratteri |
+
+IQ2_XS passa la soglia con margine. Le risposte di IQ3_S sono le più ricche: aggiungono il
+contesto e dicono che cosa i documenti non coprono. Quelle di IQ2_XS lo fanno spesso, non
+sempre. La prova 2 (opencode e pi) resta da fare. Dopo la prova Strata è stato rimesso su IQ3_S:
+il cambio definitivo è una decisione dell'utente.
+
+**Ragionamento ridotto.** Su Strata il valore "low" funziona (IQ3_S da 186 a 63 s, risposte
+più asciutte). llama.cpp invece ignora "low" e rispetta solo "none", che spegne del tutto il
+ragionamento. Senza ragionamento il modello non capisce quando smettere di cercare: Qwen3.5-9B
+ha passato 13 minuti sulla domanda senza risposta.
+
 Per vedere che cosa farebbe Strata senza cambiare nulla:
 
 ```bash
 strata launch --plan --model iq2_xs --context 128k
 ```
 
-Il cambio vero si fa dalle schermate di `strata launch`, che nella scelta del modello dicono
+Il cambio usato nella prova del 15 novembre, con il profilo `smart` di questo PC (il primo
+avvio di una versione mai usata la prepara e richiede qualche minuto in più; per tornare
+indietro si scrive `iq3_s` al posto di `iq2_xs`):
+
+```bash
+strata launch --stop --preset smart
+```
+
+```bash
+strata launch --preset smart --model iq2_xs --set resident-experts=off --no-tui --yes
+```
+
+In alternativa il cambio si fa dalle schermate di `strata launch`, che nella scelta del modello dicono
 per ogni versione "fits / tight / does not fit this computer" e permettono di rimettere le
 impostazioni personali (cache delle conversazioni, riserva di memoria video). Il profilo
 attuale ha la taratura saltata e una nuova taratura in sospeso dopo l'aggiornamento del motore:
@@ -179,9 +214,22 @@ Ordine consigliato: Gemma 4 12B per primo, per l'affidabilità del formato delle
 Qwen3.5-9B come alternativa, per la copertura delle lingue. Servono con Ollama, LM Studio o
 llama.cpp, che LLMWiki trova da solo.
 
-**Non provati con LLMWiki e non provati in italiano.** Le misure vengono da una guida di un
-produttore di software e non sono state riprodotte in modo indipendente. Prima di consigliarli
-a qualcuno vanno passati dal banco di prova.
+**Provati con LLMWiki il 15 novembre 2026**, con llama.cpp e 4 posti paralleli
+(`-c 131072 -np 4`, 32K a posto), su documenti in italiano:
+
+| | Gemma 4 12B | Qwen3.5-9B | Qwen3.5-9B, schede senza ragionamento |
+|---|---|---|---|
+| Indice di 64 documenti | 33 min | 80 min | 15 min |
+| Risposte sul proprio indice | 24/24 · 45 s | 24/24 · 55 s | 24/24 · 47 s |
+| Risposte sull'indice di Strata | 24/24 · 28 s | 24/24 · 26 s | - |
+| Citazioni non confermate | 0 | 0 | 0 |
+| Stile | il fatto e la citazione, poco altro | il fatto, la formula, il calcolo | come a sinistra |
+
+Tutti e due sono adatti a un PC senza Strata. Il più conveniente è **Qwen3.5-9B con le schede
+scritte senza ragionamento** (`summary_effort = "none"`, `send_reasoning_effort = true`): ha
+l'indice più veloce e nessun errore. Gemma 4 dà risposte molto asciutte e una volta ha scritto
+una parola storpiata ("prev blistersione"). Su questo PC entrambi restano più lenti di
+Strata IQ2_XS.
 
 ## Fonti
 

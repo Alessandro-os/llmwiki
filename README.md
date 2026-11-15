@@ -103,6 +103,45 @@ esempio: indicano che il meccanismo funziona, non sono un benchmark.
 | Indicizzazione | circa 45 s a documento (scheda) con questo modello |
 | Struttura con 5000 documenti (modello finto) | seconda passata 1,4 s senza chiamate · ricerca 8 ms · un documento nuovo rigenera solo il suo ramo |
 
+### Confronto dei modelli locali (2026-11-15)
+
+Stesso PC (RTX 3080 Ti, 48 GB di RAM). Strata per Qwen 3.8 Flash Next, llama.cpp con 4 posti
+paralleli per gli altri. Tutti rispondono sullo **stesso indice**, fatto da Strata IQ3_S, così
+si confronta solo chi risponde. Dettagli e scelta in
+[docs/11-scelta-del-modello.md](docs/11-scelta-del-modello.md).
+
+| Modello | Esempi (9) | Raccolta difficile (24) | Lunghezza media |
+|---|---|---|---|
+| Strata IQ3_S, ragionamento predefinito | 9/9 · 104 s | 24/24 · 186 s¹ | 946 caratteri |
+| Strata IQ3_S, ragionamento ridotto | 7/9² · 71 s | 24/24 · 63 s | 367 |
+| **Strata IQ2_XS** | **9/9 · 20 s** | **24/24 · 16 s** | 488 |
+| Gemma 4 12B | 9/9 · 31 s | 24/24 · 28 s | 176 |
+| Qwen3.5-9B | 9/9 · 46 s | 24/24 · 26 s | 424 |
+| Qwen3.5-9B senza ragionamento | 8/9² · 35 s | 24/24 · 47 s¹ | 330 |
+| Qwen3.6-35B-A3B | 9/9 · 57 s | 23/24 · 40 s | 340 |
+| Qwen3.6-35B-A3B senza ragionamento | 7/9 · 28 s | 23/24 · 21 s | 337 |
+
+Nessuna citazione falsa mostrata come confermata. Le poche ⚠ (solo Qwen3.6) sono affermazioni
+del tipo "in quella cartella non c'è" citate su una cartella intera: la verifica le ha
+respinte a ragione.
+
+¹ Una sola domanda pesa sulla media: quella senza risposta nei documenti. IQ3_S ci ha messo
+37 minuti (98 s di media senza di lei), Qwen3.5 senza ragionamento 13 minuti.
+² Le risposte erano giuste ma scritte in formule (`\frac{5}{2}`, `0{,}40`), che il controllo
+automatico non riconosce.
+
+Indice nuovo della raccolta difficile (64 documenti) fatto da ciascun modello, poi le
+risposte su quell'indice:
+
+| Modello | Indice | Risposte |
+|---|---|---|
+| Strata IQ3_S (14 novembre) | 47 min | 23/24 · 110 s |
+| **Strata IQ2_XS** | **18 min** | 23/24 · 17 s (l'errore: una riga citata sbagliata, segnata ⚠ dalla verifica) |
+| Qwen3.5-9B, schede senza ragionamento | 15 min | 24/24 · 47 s |
+| Gemma 4 12B | 33 min | 24/24 · 45 s |
+| Qwen3.6-35B-A3B | 61 min | 23/24 · 44 s |
+| Qwen3.5-9B | 80 min | 24/24 · 55 s |
+
 ## Dove stanno i dati
 
 ```

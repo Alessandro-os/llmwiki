@@ -110,7 +110,15 @@ Indicizza i documenti di `examples/docs` in una cartella di lavoro e pone le 9 d
 `evals/questions.json`. Per ogni domanda controlla: che la risposta contenga i valori attesi
 (`must_contain`), che citi il documento giusto (`must_cite`), e, per la domanda senza
 risposta, che l'agente dica che l'informazione non c'è. Riporta tempi, citazioni, ⚠ e metodi
-di verifica. Opzioni: `--suite difficile`, `--limit N`, `--fresh` (rifà l'indice).
+di verifica. Opzioni: `--suite difficile`, `--limit N`, `--fresh` (rifà l'indice),
+`--work CARTELLA` (cartella di lavoro dentro `evals/`, per tenere separati gli indici di
+modelli diversi), `--out FILE` (nome del rapporto, salvato nella cartella di lavoro).
+
+Il rapporto JSON contiene le impostazioni usate, il tempo dell'indice e, per ogni domanda, il
+testo della risposta, i passi dell'agente e degli aiutanti, le deleghe e il tempo della
+verifica: serve a capire dove va il tempo e a rileggere le risposte, non solo a contarle.
+Per confrontare chi risponde a parità di indice si copia una cartella di lavoro già fatta e la
+si passa con `--work` a ogni configurazione, senza `--fresh`.
 
 La suite `difficile` (`evals/corpus.py`) genera 64 documenti fatti per confondere, tra cui 16
 contratti con la stessa struttura e numeri diversi, e 24 domande con risposta nota.

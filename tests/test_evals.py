@@ -30,6 +30,22 @@ def test_eval_files_are_consistent():
     assert perfect == {"auc": 1.0, "false_accepts": 0, "false_rejects": 0}
 
 
+def test_answers_report_keeps_text_steps_and_settings(tmp_path, monkeypatch):
+    """Per confrontare le combinazioni servono il testo delle risposte, i passi, il tempo della
+    verifica e le impostazioni usate, salvati nel file indicato."""
+    config = tmp_path / "wiki.toml"
+    config.write_text('[llm]\nprovider = "mock"\n[verify]\njudge = "llm"\n', encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["run.py", "answers", "--config", str(config), "--limit", "2",
+                                     "--work", str(tmp_path / "lavoro"), "--out", "prova.json"])
+    evals_run.main()
+    report = json.loads((tmp_path / "lavoro" / "prova.json").read_text(encoding="utf-8"))
+    assert report["settings"]["agent_model"] and report["index"]["documents"] >= 1
+    assert len(report["answers"]) == 2
+    for row in report["answers"]:
+        assert {"answer", "steps", "explorer_steps", "verify_seconds", "chars", "mode"} <= set(row)
+        assert row["steps"] >= 1
+
+
 @pytest.mark.skipif(not nli.installed(REAL_MODEL_DIR), reason="decision model non installato")
 def test_decision_model_keeps_its_quality():
     judge = nli.NliJudge(REAL_MODEL_DIR)
