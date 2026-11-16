@@ -1,6 +1,6 @@
 # Cronologia delle versioni
 
-## Non ancora pubblicato (0.5.1)
+## 0.5.1 · 2026-11-16
 
 Per chi la usa:
 

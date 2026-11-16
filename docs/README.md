@@ -5,7 +5,7 @@ un documento da quando lo aggiungi a quando è pronto, che cosa succede a una do
 la scrivi a quando la risposta compare con le citazioni controllate, e che cosa c'è attorno
 (modelli, accessi, app, file su disco).
 
-Ogni numero e ogni nome citato qui viene dal codice della versione 0.5.0. Dove una cosa non è
+Ogni numero e ogni nome citato qui viene dal codice della versione 0.5.1. Dove una cosa non è
 stata provata, c'è scritto.
 
 Sono appunti in markdown: puoi anche copiare questa cartella dentro uno spazio di LLMWiki e

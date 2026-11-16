@@ -2,7 +2,7 @@
 
 [← Indice](README.md)
 
-Che cosa l'app non fa o non garantisce nella versione 0.5.0. Gli sviluppi possibili sono in
+Che cosa l'app non fa o non garantisce nella versione 0.5.1. Gli sviluppi possibili sono in
 `DA_FARE.md`.
 
 ## Non provato
