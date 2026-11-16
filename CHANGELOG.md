@@ -10,21 +10,24 @@ Per chi la usa:
 - Ogni documento ricorda quale modello l'ha letto, in quanto tempo e quando: lo dice la sua
   scheda in Documenti.
 - Scansioni e appunti scritti a mano: si sceglie con che cosa leggere i PDF.
-  - **Automatico** (predefinito): testo esatto se il PDF lo contiene, MiniCPM-OCR se è una
+  - **Automatico** (predefinito): testo esatto se il PDF lo contiene, l'OCR se è una
     scansione.
   - **Testo esatto**: per i PDF fatti al computer.
-  - **MiniCPM-OCR**: per scansioni e appunti a mano.
+  - **OCR**: per scansioni e appunti a mano.
 
   La scelta vale per lo spazio, e si può cambiare per ogni documento: al caricamento, o dopo
   con "Rileggi". Una leggenda ricorda chi fa meglio che cosa.
-- MiniCPM-OCR si scarica con un clic (1,7 GB, impronte controllate). L'app lo accende da sola
+- Qualunque OCR, trovato sul computer come i modelli: "Cerca gli OCR sul computer" trova i
+  modelli OCR scaricati (file GGUF, anche quelli di LM Studio), quelli accesi su un server e
+  Tesseract; si sceglie con "Usa questo". L'app accende da sola l'OCR scelto quando serve,
   sulla scheda video se c'è posto (2-3 s a pagina), altrimenti sul processore, senza togliere
-  memoria al modello che risponde, e lo spegne quando ha finito. È stato scelto su 12 pagine
-  vere di appunti, tra sei OCR: è il migliore tra quelli che non inventano.
-- In "Opzioni avanzate" si può collegare un altro OCR qualunque: "Cerca altri OCR sul
-  computer" propone solo quelli che leggono davvero un'immagine di prova. Ogni documento
-  ricorda quale OCR l'ha letto e dove ha girato. Se l'OCR non c'è o è spento, i PDF aspettano
-  invece di finire in errore.
+  memoria al modello che risponde, e lo spegne quando ha finito. Un OCR su un server può avere
+  il suo comando di avvio, che l'app lancia se è spento.
+- L'app non scarica nessun OCR. Se non ne trova, consiglia MiniCPM-OCR (scelto su 12 pagine
+  vere di appunti, tra sei OCR: il migliore tra quelli che non inventano), con i link, una guida
+  scritta (docs/12) e un tasto che copia un messaggio da mandare a Claude per farsi aiutare.
+- Ogni documento ricorda quale OCR l'ha letto e dove ha girato. Se l'OCR non c'è o è spento, i
+  PDF aspettano invece di finire in errore.
 - Tasto Aggiorna: a ogni avvio l'app controlla su GitHub se c'è una versione nuova e, se c'è,
   lo mostra in basso a destra nella pagina principale. Premendolo scarica la versione nuova,
   ne controlla l'impronta, si chiude e si riapre aggiornata, senza lasciare file della
@@ -46,12 +49,18 @@ Per chi sviluppa:
   `/ocr/test`, colonna `ocr` in `docs`. Dipendenza nuova: pypdfium2 (pagine PDF come
   immagini). `LOCAL_SERVERS` aggiunge llama.cpp 8090 e SGLang 30000 e 10000. Test in
   `tests/test_ocr.py`.
-- `minicpm.py` (`Install`, `ManagedOcr`: scaricamento verificato, llama-server acceso sulla
-  scheda video o sul processore, spento dopo 3 minuti di inattività), `ocr.strips` (pagina a
-  strisce), `ocr.loop_start` (freno alle ripetizioni, testo in stream), `ocr.clean_text`
-  (coordinate e segnali di Unlimited OCR e DeepSeek-OCR). `[ocr] mode` = `auto | text | ocr`,
-  `kind` = `minicpm | server | tesseract`, `llama_server`. Colonna `method` in `docs` e rotta
-  `/api/admin/doc-method`; `/api/upload` accetta `method`; rotta `/api/admin/ocr/install`.
+- `ocr_local.py` (`find_models`: coppie modello + `mmproj` nelle cartelle note, file di bozza
+  esclusi; `find_llama_servers`; `LocalOcr`: llama-server acceso sulla scheda video o sul
+  processore, spento dopo 3 minuti) e `ocr_catalog.json` (OCR conosciuti: istruzione, strisce,
+  per che cosa vanno bene, dove si scaricano). `app.find_local_ocr`, `detect_ocr(folders)`.
+  `Ocr.read` taglia a strisce e chiama `read_piece` delle sottoclassi; `ServerOcr` ha `prompt`,
+  `parts` e `start_command`. `ocr.loop_start` (freno alle ripetizioni, testo in stream),
+  `ocr.clean_text` (coordinate e segnali di Unlimited OCR e DeepSeek-OCR, `[Non-Text]` di MiniCPM-OCR);
+  `ocr.strips` non taglia strisce più basse di 200 pixel (`MIN_STRIP`). `[ocr] mode` =
+  `auto | text | ocr`, `kind` = `local | server | tesseract`, più `name`, `prompt`, `strips`,
+  `folders`, `model_path`, `mmproj_path`, `llama_server`, `start_command`. `/api/admin/settings`
+  aggiunge `ocr_catalog` e `ocr_folder`. Colonna `method` in `docs` e rotta
+  `/api/admin/doc-method`; `/api/upload` accetta `method`.
 - `update.py` (`Updater`: controllo su GitHub, scaricamento, installazione silenziosa) e
   `download.py` (`fetch_verified`, ora usato anche da `nli.Download`). Rotta
   `/api/admin/update`; `/api/status` aggiunge `update` nell'app desktop. Installatore:

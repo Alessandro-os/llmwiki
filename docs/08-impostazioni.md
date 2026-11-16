@@ -56,9 +56,14 @@ Come leggere i PDF ([pagina 2](02-lettura-dei-documenti.md), 2.2.1).
 | Voce | Predefinito | App | Effetto |
 |---|---|---|---|
 | `mode` | `"auto"` | sì | `auto`: testo esatto se il PDF lo contiene, altrimenti OCR; `text`: solo il testo del PDF; `ocr`: ogni pagina letta come immagine. Un documento può avere il suo modo ("Rileggi") |
-| `kind` | `"minicpm"` | sì | `minicpm` (MiniCPM-OCR gestito dall'app), `server` (un altro OCR, API compatibile OpenAI) oppure `tesseract` |
-| `llama_server` | `""` | sì | Solo `minicpm`: un `llama-server.exe` già installato, al posto di quello scaricato |
+| `kind` | `""` | sì | Quale OCR: `local` (un modello GGUF acceso dall'app con llama-server), `server` (un OCR acceso su un server, API compatibile OpenAI), `tesseract`, oppure `""` (nessuno). Si sceglie con "Cerca gli OCR sul computer" → "Usa questo" |
+| `name` | `""` | sì | Come chiamarlo nell'interfaccia e nelle schede dei documenti |
+| `prompt` | `""` | sì | L'istruzione data all'OCR; vuota = quella generica. Per gli OCR conosciuti la mette il catalogo |
+| `strips` | `0` | sì | Strisce orizzontali in cui tagliare ogni pagina (0 = intera, al massimo 12). Per MiniCPM-OCR 4 |
+| `folders` | `""` | sì | Altre cartelle dove cercare gli OCR, separate da `;` |
+| `model_path`, `mmproj_path`, `llama_server` | `""` | sì | Solo `local`: il modello, la sua parte visiva e il `llama-server.exe` che lo fa girare |
 | `base_url`, `model` | `""` | sì | Solo `server`: indirizzo e nome del modello |
+| `start_command` | `""` | sì | Solo `server`: comando che accende l'OCR se non risponde (uno script `.cmd`); l'app aspetta fino a 5 minuti |
 | `api_key_env` | `""` | API | Solo `server`: variabile con la chiave, se il server ne chiede una |
 | `path`, `language` | `""`, `"ita+eng"` | sì | Solo `tesseract`: percorso del programma e lingue installate da usare |
 | `dpi` | `200` | file | Risoluzione a cui le pagine diventano immagini |

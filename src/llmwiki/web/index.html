@@ -143,7 +143,7 @@
       <div class="field"><label for="folder">In quale cartella metterli (facoltativo)</label>
         <input type="text" id="folder" placeholder="per esempio: contratti/2026"></div>
       <div class="field"><label for="readAs">Come leggere i PDF (facoltativo)</label><select id="readAs"></select>
-        <span class="small muted">Testo esatto per i PDF fatti al computer, MiniCPM-OCR per scansioni e appunti a mano. Il dettaglio è in Impostazioni → Lettura dei documenti.</span></div>
+        <span class="small muted">Testo esatto per i PDF fatti al computer, l'OCR per scansioni e appunti a mano. Il dettaglio è in Impostazioni → Lettura dei documenti.</span></div>
       <div class="row"><button id="openFolder" hidden>Apri la cartella sul computer</button><span id="uploadMsg" class="small"></span></div>
     </div>
     <div id="browser"></div>
@@ -320,7 +320,7 @@ async function pollJudge() {
   const s = await api("/api/admin/settings").catch(() => null); if (!s) return;
   const j = s.judge_model, el = $("judgeMsg");
   if (el) el.textContent = j.status === "downloading" ? "scarico… " + Math.round(100 * j.done / j.total) + "%" : j.status === "error" ? "non riuscito: " + j.error : "";
-  if (j.status === "downloading" || s.ocr_engine.status === "downloading") setTimeout(pollJudge, 1500); else refreshStatus();
+  if (j.status === "downloading") setTimeout(pollJudge, 1500); else refreshStatus();
 }
 async function useServer(server) {
   const model = server.models[0];
@@ -558,46 +558,86 @@ function judgeLine(j) {
 }
 
 // ---------------------------------------------------------------- OCR: come leggere i PDF
-// La leggenda riassume il confronto del 16/11/2026 su 12 pagine vere (README, "Confronto degli OCR").
-const READING = { auto: "Automatico", text: "Testo esatto", ocr: "MiniCPM-OCR" };
-const LEGEND = '<div class="legend small"><b>Chi fa meglio che cosa</b>' +
-  '<div><b>Testo esatto</b> · PDF nati al computer (Word, slide, LaTeX): perfetto e istantaneo. Non legge scansioni né appunti a mano.</div>' +
-  "<div><b>MiniCPM-OCR</b> · scansioni, foto, appunti a mano. Lo stampato lo legge quasi perfetto, la scrittura a mano circa a metà. " +
-  "Non inventa: quando non capisce scrive parole storpiate, che si riconoscono. 2-3 secondi a pagina se la scheda video è libera, 30-50 secondi se no.</div>" +
-  '<div class="muted">Automatico usa il testo esatto quando il PDF lo contiene, MiniCPM-OCR quando è una scansione. ' +
-  "I modelli generici che vedono le immagini (come Strata) non vanno usati come OCR: inventano frasi e numeri.</div></div>";
-let ocrChoice = null, ocrFound = null, ocrProbe = null;
+// L'app non dipende da un OCR preciso: cerca quelli presenti sul computer, li riconosce con il
+// catalogo (ocr_catalog.json, dal confronto del 16/11/2026) e non scarica niente da sola.
+const READING = { auto: "Automatico", text: "Testo esatto", ocr: "l'OCR" };
+const GUIDE_URL = "https://github.com/Alessandro-os/llmwiki/blob/main/docs/12-installare-un-ocr.md";
+let ocrChoice = null, ocrFound = null, ocrProbe = null, ocrScanned = false, ocrFolders = null;  // ocrFolders: scritte ma non salvate
 const readingOptions = (current, withSpace) => (withSpace ? opt("", "Come dice lo spazio", current) : "") +
-  opt("auto", "Automatico: testo esatto se c'è, altrimenti MiniCPM-OCR", current) + opt("text", "Testo esatto (dal PDF)", current) + opt("ocr", "MiniCPM-OCR (scansioni, appunti a mano)", current);
-function ocrName(o) {
-  return o.kind === "server" && o.model ? esc(o.model) + ' <span class="muted">su ' + esc(o.base_url) + "</span>" : o.kind === "tesseract" && o.path ? "Tesseract (" + esc(o.language) + ")" : "MiniCPM-OCR";
+  opt("auto", "Automatico: testo esatto se c'è, altrimenti l'OCR", current) + opt("text", "Testo esatto (dal PDF)", current) + opt("ocr", "OCR (scansioni, appunti a mano)", current);
+function legend(catalog) {
+  return '<div class="legend small"><b>Chi fa meglio che cosa</b>' +
+    "<div><b>Testo esatto</b> · PDF nati al computer (Word, slide, LaTeX): perfetto e istantaneo. Non legge scansioni né appunti a mano.</div>" +
+    catalog.ocr.map((c) => "<div><b>" + esc(c.name) + "</b>" + (c.recommended ? " (consigliato)" : "") + " · " + esc(c.good_for) + " " + esc(c.speed) + "</div>").join("") +
+    '<div class="muted">Automatico usa il testo esatto quando il PDF lo contiene, l\'OCR quando è una scansione. ' + esc(catalog.generic.good_for) + "</div></div>";
 }
-function engineLine(e) {
-  return e.status === "ready" ? '<span class="ok">✓ pronto</span>' : e.status === "downloading" ? "scarico… " + Math.round(100 * e.done / e.total) + "%"
-    : (e.status === "error" ? '<span class="warn">scaricamento non riuscito: ' + esc(e.error) + "</span> " : "non scaricato ") + '<button data-act="ocr-install">Scarica (1,7 GB)</button>';
+function ocrName(o) {
+  if (o.kind === "local" && o.model_path) return esc(o.name || o.model_path.split(/[\\/]/).pop()) + ' <span class="muted small">acceso dall\'app quando serve</span>';
+  if (o.kind === "server" && o.model) return esc(o.name || o.model) + ' <span class="muted small">su ' + esc(o.base_url) + "</span>";
+  if (o.kind === "tesseract" && o.path) return "Tesseract (" + esc(o.language) + ")";
+  return '<span class="warn">nessuno collegato</span>';
 }
 function ocrList() {
   if (!ocrFound) return "";
-  if (!ocrFound.length) return '<span class="warn small">Nessun altro OCR trovato sul computer.</span>';
-  return ocrFound.map((f, i) => '<div class="row"><span style="flex:1">' + (f.ok ? "✓ " : "· ") + esc(f.name) +
-    (f.ok ? ' <span class="muted small">legge l\'immagine di prova in ' + f.seconds + " s</span>" : ' <span class="muted small">' + esc(f.error) + "</span>") +
-    (f.note ? '<br><span class="warn small">' + esc(f.note) + "</span>" : "") + "</span>" + (f.ok ? '<button data-act="ocr-use" data-i="' + i + '">Usa questo</button>' : "") + "</div>").join("");
+  return ocrFound.map((f, i) => '<div class="row"><span style="flex:1">' + (f.ok ? "✓ " : "· ") + "<b>" + esc(f.name) + "</b>" + (f.recommended ? " (consigliato)" : "") +
+    (f.ok && f.seconds ? ' <span class="muted small">legge l\'immagine di prova in ' + f.seconds + " s</span>" : "") +
+    (f.good_for ? '<br><span class="muted small">' + esc(f.good_for) + "</span>" : "") +
+    (f.note ? '<br><span class="muted small">' + esc(f.note) + "</span>" : "") +
+    (f.ok ? "" : '<br><span class="warn small">' + esc(f.error) + "</span>") + "</span>" +
+    (f.ok ? '<button data-act="ocr-use" data-i="' + i + '">Usa questo</button>' : "") + "</div>").join("");
 }
-function ocrCard(o, engine) {
-  const chosen = ocrChoice || o;
+// Nessun OCR che funzioni: si consiglia il migliore del catalogo, con i link, i passi e il
+// messaggio da dare a Claude (o a un altro assistente) per farsi aiutare. Niente si scarica da solo.
+function bestOcr() {
+  const c = settings.ocr_catalog;
+  return c.ocr.find((x) => x.recommended) || c.ocr[0];
+}
+function ocrGuide(others) {
+  const s = settings, best = bestOcr();
+  return '<div class="notice"><b>' + (others ? "Gli OCR trovati funzionano, ma non sono i più adatti." : "Non ho trovato un OCR pronto sul computer.") + "</b> Per leggere scansioni e appunti a mano ti consiglio <b>" + esc(best.name) +
+    "</b>: è gratuito e gira sul tuo computer, senza mandare fuori i documenti. L'app non scarica niente da sola: bastano tre passi." +
+    '<ol style="margin:8px 0;padding-left:20px">' +
+    '<li>Scarica <b>llama.cpp</b> dalla <a href="' + esc(s.ocr_catalog.llama_cpp) + '" target="_blank" rel="noopener">pagina delle versioni</a>: con una scheda video NVIDIA il file che contiene <code>win-cuda</code>, con un\'altra scheda <code>win-vulkan</code>, senza scheda video <code>win-cpu-x64</code>. Estrai lo zip in <code>' + esc(s.ocr_folder) + "</code>.</li>" +
+    '<li>Dalla <a href="' + esc(best.download) + '" target="_blank" rel="noopener">pagina di ' + esc(best.name) + "</a> scarica " + esc(best.download_files) + " nella stessa cartella.</li>" +
+    "<li>Torna qui e premi «Cerca gli OCR sul computer», poi «Usa questo» e «Salva e prova».</li></ol>" +
+    '<div class="row"><button data-act="ocr-claude">Copia il messaggio per Claude</button><a href="' + GUIDE_URL + '" target="_blank" rel="noopener">Guida completa</a><span id="claudeMsg" class="small"></span></div>' +
+    '<textarea id="claudeText" readonly hidden style="width:100%;min-height:140px;margin-top:8px"></textarea></div>';
+}
+function claudePrompt() {
+  const s = settings, best = bestOcr();
+  return "Aiutami a installare un OCR per LLMWiki sul mio computer Windows, passo passo e con parole semplici.\n\n" +
+    "Mi servono due cose, da mettere tutte e due nella cartella " + s.ocr_folder + ":\n" +
+    "1. llama-server di llama.cpp, dalla pagina " + s.ocr_catalog.llama_cpp + " . Dimmi quale zip scegliere per la mia scheda video e come capire quale scheda ho.\n" +
+    "2. " + best.name + ": i file " + best.download_files + ", dalla pagina " + best.download + " .\n\n" +
+    "Spiegami come controllare che i file scaricati siano interi (dimensione e impronta SHA-256 indicate sulla pagina) e come provare che llama-server parta. " +
+    "Non eseguire niente sul mio computer senza chiedermelo. Alla fine in LLMWiki premerò «Cerca gli OCR sul computer».";
+}
+function ocrCard(o) {
+  const chosen = ocrChoice || o, k = chosen.kind || "", folders = ocrFolders ?? o.folders;
+  const usable = ocrFound && ocrFound.some((f) => f.ok), best = ocrFound && ocrFound.some((f) => f.ok && f.recommended);
   return '<div class="field"><label for="ocrMode">Come leggere i PDF</label><select id="ocrMode">' + readingOptions(o.mode) + "</select>" +
-      '<span class="small muted">Vale per i documenti nuovi; ogni documento si può rileggere in un altro modo dalla sua scheda.</span></div>' + LEGEND +
-    (o.kind === "minicpm" ? '<div class="row"><b>MiniCPM-OCR:</b> ' + engineLine(engine) + "</div>" + (engine.status === "downloading" ? '<div class="bar"><div style="width:' + (100 * engine.done / engine.total) + '%"></div></div>' : "")
-      : '<div class="row"><b>OCR:</b> <span id="ocrChosen">' + ocrName(chosen) + "</span></div>") +
-    '<details><summary>Opzioni avanzate: un altro OCR</summary><div style="display:grid;gap:12px">' +
-      '<div class="field"><label for="ocrKind">Quale OCR usare</label><select id="ocrKind">' + opt("minicpm", "MiniCPM-OCR, gestito dall'app (consigliato)", chosen.kind) +
-        opt("server", "Un altro OCR acceso su un server", chosen.kind) + opt("tesseract", "Tesseract installato", chosen.kind) + "</select></div>" +
-      field("llamaServer", "llama-server.exe già installato (facoltativo)", o.llama_server, "text", "Per usare un llama.cpp che hai già, invece di scaricarlo.") +
-      '<div class="row"><button data-act="ocr-detect">Cerca altri OCR sul computer</button><span id="ocrMsg" class="small"></span></div><div id="ocrList" style="display:grid;gap:6px">' + ocrList() + "</div>" +
-      field("ocrUrl", "Indirizzo di un server OCR", chosen.kind === "server" ? chosen.base_url : "", "text", "Compatibile OpenAI, per esempio http://127.0.0.1:10000/v1") +
-      field("ocrModel", "Nome del modello OCR", chosen.kind === "server" ? chosen.model : "", "text") +
-      field("ocrPath", "Percorso di tesseract.exe", chosen.kind === "tesseract" ? chosen.path : "", "text") + "</div></details>" +
+      '<span class="small muted">Vale per i documenti nuovi; ogni documento si può rileggere in un altro modo dalla sua scheda.</span></div>' + legend(settings.ocr_catalog) +
+    '<div class="row"><b>OCR:</b> <span id="ocrChosen">' + ocrName(chosen) + "</span></div>" +
+    '<div class="row"><button data-act="ocr-detect">Cerca gli OCR sul computer</button><span id="ocrMsg" class="small"></span></div><div id="ocrList" style="display:grid;gap:6px">' + ocrList() + "</div>" +
+    (ocrFound && !best && !o.kind ? ocrGuide(usable) : "") +  // finché manca l'OCR consigliato
+    "<details" + (folders !== o.folders ? " open" : "") + '><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' +
+      field("ocrFolders", "Altre cartelle dove cercare gli OCR", folders, "text", "Separate da ; . Si cerca già in " + esc(settings.ocr_folder) + ", in LM Studio e in Hugging Face.") +
+      '<div class="field"><label for="ocrKind">Quale OCR usare</label><select id="ocrKind">' + opt("", "Nessuno", k) + opt("local", "Un modello OCR sul computer, acceso dall'app", k) +
+        opt("server", "Un OCR acceso su un server", k) + opt("tesseract", "Tesseract installato", k) + "</select></div>" +
+      '<div data-kind="local" style="display:grid;gap:12px">' + field("ocrModelPath", "Modello (file .gguf)", k === "local" ? chosen.model_path : "", "text") +
+        field("ocrMmproj", "Parte visiva (file mmproj .gguf)", k === "local" ? chosen.mmproj_path : "", "text") +
+        field("ocrLlama", "Programma llama-server.exe", k === "local" ? chosen.llama_server : "", "text") + "</div>" +
+      '<div data-kind="server" style="display:grid;gap:12px">' + field("ocrUrl", "Indirizzo del server OCR", k === "server" ? chosen.base_url : "", "text", "Compatibile OpenAI, per esempio http://127.0.0.1:10000/v1") +
+        field("ocrModel", "Nome del modello OCR", k === "server" ? chosen.model : "", "text") +
+        field("ocrStart", "Comando che lo accende (facoltativo)", k === "server" ? chosen.start_command : "", "text", "Per esempio uno script .cmd: se il server è spento, l'app lo lancia e aspetta che risponda.") + "</div>" +
+      '<div data-kind="tesseract">' + field("ocrPath", "Percorso di tesseract.exe", k === "tesseract" ? chosen.path : "", "text") + "</div>" +
+      '<div data-kind="local server" style="display:grid;gap:12px">' + field("ocrStrips", "Strisce per pagina (0 = pagina intera)", chosen.strips || 0, "number", "Gli OCR piccoli leggono meglio la pagina tagliata in strisce orizzontali: per MiniCPM-OCR 4.") +
+        field("ocrPrompt", "Istruzione per l'OCR", chosen.prompt || "", "text", "Vuota = quella generica. Per gli OCR conosciuti la sa già l'app.") + "</div></div></details>" +
     '<div class="row"><button class="primary" data-act="save-ocr">Salva e prova</button><span id="ocrSaveMsg" class="small"></span></div><div id="ocrProbe">' + ocrReport(ocrProbe) + "</div>";
+}
+function showOcrKind() {
+  const kind = $("ocrKind").value;
+  $("settingsPage").querySelectorAll("[data-kind]").forEach((el) => { el.hidden = !el.dataset.kind.split(" ").includes(kind); });
 }
 function ocrReport(p) {
   if (!p) return "";
@@ -605,9 +645,12 @@ function ocrReport(p) {
     : '<div class="notice"><b>L\'OCR non funziona.</b> ' + esc(p.error) + "</div>";
 }
 function formOcr() {
-  const kind = $("ocrKind").value, base = { mode: $("ocrMode").value, kind, llama_server: $("llamaServer").value.trim() };
-  if (kind === "server") return Object.assign(base, { base_url: $("ocrUrl").value.trim(), model: $("ocrModel").value.trim() });
-  if (kind === "tesseract") return Object.assign(base, { path: $("ocrPath").value.trim(), language: (ocrChoice && ocrChoice.language) || settings.ocr.language || "eng" });
+  const kind = $("ocrKind").value, cur = settings.ocr, c = ocrChoice && ocrChoice.kind === kind ? ocrChoice : (cur.kind === kind ? cur : {});
+  const base = { mode: $("ocrMode").value, kind, folders: $("ocrFolders").value.trim(), name: c.name || "",
+    strips: +$("ocrStrips").value || 0, prompt: $("ocrPrompt").value.trim() };
+  if (kind === "local") return Object.assign(base, { model_path: $("ocrModelPath").value.trim(), mmproj_path: $("ocrMmproj").value.trim(), llama_server: $("ocrLlama").value.trim() });
+  if (kind === "server") return Object.assign(base, { base_url: $("ocrUrl").value.trim(), model: $("ocrModel").value.trim(), start_command: $("ocrStart").value.trim() });
+  if (kind === "tesseract") return Object.assign(base, { path: $("ocrPath").value.trim(), language: c.language || cur.language || "eng" });
   return base;
 }
 function renderSettings() {
@@ -644,16 +687,17 @@ function renderSettings() {
       '<label class="row"><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.users.length ? "" : " disabled") + "> Rendi l'app raggiungibile dagli altri computer della rete</label>" +
       '<div class="small muted">' + (s.users.length ? "Indirizzo da dare agli altri: <code>http://NOME-DI-QUESTO-COMPUTER:" + s.server.port + "</code>. La modifica vale dal prossimo avvio dell'app." : "Aggiungi almeno una persona per poter condividere.") + '</div><div class="row"><button data-act="save-share">Salva</button><span id="shareMsg" class="small"></span></div></div>' +
 
-    '<div class="card"><h3>Lettura dei documenti</h3>' + ocrCard(s.ocr, s.ocr_engine) + '<div id="errorList" class="small"></div>' +
+    '<div class="card"><h3>Lettura dei documenti</h3>' + ocrCard(s.ocr) + '<div id="errorList" class="small"></div>' +
       '<details><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' + field("concurrency", "Quanti documenti leggere insieme", s.index.concurrency, "number", "Con un modello sul tuo computer di solito 1 o 2; con un servizio online anche 8.") + '<div class="row"><button data-act="save-index">Salva</button><span id="indexMsg" class="small"></span></div></div></details></div>' +
 
     (s.desktop ? '<div class="card"><h3>Chiudere l\'app</h3><p class="muted small" style="margin:0">Chiudere la finestra non ferma LLMWiki: resta l\'icona vicino all\'orologio, così la lettura dei documenti continua.</p><div class="row"><button data-act="quit">Chiudi LLMWiki</button></div></div>' : "") +
     '<p class="small muted">LLMWiki ' + esc(s.version) + "</p>";
-  showPreset();
+  showPreset(); showOcrKind();
   api("/api/admin/errors").then((d) => {
     $("errorList").innerHTML = d.errors.length ? "<b>" + d.errors.length + " file non letti</b>" + d.errors.map((e) => '<div class="warn">' + esc(e.doc) + ": " + esc(e.error) + "</div>").join("") + '<div class="row" style="margin-top:8px"><button data-act="retry">Riprova a leggerli</button></div>' : '<span class="muted">Tutti i file sono stati letti senza problemi.</span>';
   }).catch(() => {});
-  if (j.status === "downloading" || s.ocr_engine.status === "downloading") setTimeout(() => { if ($("settings").classList.contains("on")) loadSettings(); }, 1500);
+  if (j.status === "downloading") setTimeout(() => { if ($("settings").classList.contains("on")) loadSettings(); }, 1500);
+  if (!s.ocr.kind && !ocrScanned) { ocrScanned = true; $("settingsPage").querySelector("[data-act=ocr-detect]").click(); }  // nessun OCR: lo cerca da sola
 }
 function showPreset() {
   const id = $("preset").value, p = settings.providers.find((x) => x.id === id) || { key: "" };
@@ -686,6 +730,7 @@ async function loadModels(say) {
 }
 $("settingsPage").addEventListener("change", (event) => {
   if (event.target.id === "preset") { $("agentModel").value = ""; showPreset(); }
+  if (event.target.id === "ocrKind") showOcrKind();
 });
 $("settingsPage").addEventListener("click", async (event) => {
   const act = event.target.dataset.act; if (!act) return;
@@ -716,28 +761,38 @@ $("settingsPage").addEventListener("click", async (event) => {
   if (act === "del-user") guard("shareMsg", async () => { await api("/api/admin/users/" + encodeURIComponent(event.target.dataset.name), { method: "DELETE" }); shownToken = null; await loadSettings(); });
   if (act === "save-share") guard("shareMsg", async () => { settings = await post("/api/admin/settings", { server: { host: $("shared").checked ? "0.0.0.0" : "127.0.0.1" } }); renderSettings(); say("shareMsg", "Salvato: vale dal prossimo avvio."); });
   if (act === "ocr-detect") guard("ocrMsg", async () => {
-    say("ocrMsg", "cerco e provo ogni OCR con un'immagine… può volerci un minuto");
+    say("ocrMsg", "cerco gli OCR e provo quelli accesi con un'immagine… può volerci un minuto");
     event.target.disabled = true;
-    try { ocrFound = (await api("/api/admin/ocr/detect")).found; } finally { event.target.disabled = false; }
+    ocrFolders = $("ocrFolders").value.trim();
+    try { ocrFound = (await api("/api/admin/ocr/detect?folders=" + encodeURIComponent(ocrFolders))).found; } finally { event.target.disabled = false; }
     const good = ocrFound.filter((f) => f.ok).length;
-    $("ocrList").innerHTML = ocrList();
-    say("ocrMsg", good ? good + (good === 1 ? " OCR funziona: premi «Usa questo»." : " OCR funzionano: scegline uno.") : "Nessun OCR funzionante trovato.", !good);
+    renderSettings();
+    say("ocrMsg", good ? good + (good === 1 ? " OCR pronto: premi «Usa questo»." : " OCR pronti: scegline uno.") : "Nessun OCR pronto sul computer.", !good);
   });
   if (act === "ocr-use") {
     const f = ocrFound[+event.target.dataset.i]; ocrChoice = f;
-    $("ocrKind").value = f.kind; $("ocrUrl").value = f.kind === "server" ? f.base_url : ""; $("ocrModel").value = f.kind === "server" ? f.model : ""; $("ocrPath").value = f.kind === "tesseract" ? f.path : "";
+    renderSettings();
     say("ocrMsg", "Scelto " + f.name + ": premi «Salva e prova».");
+  }
+  if (act === "ocr-claude") {
+    const text = claudePrompt(), box = $("claudeText");
+    try { await navigator.clipboard.writeText(text); say("claudeMsg", "Copiato: incollalo in una chat con Claude."); }
+    catch {  // appunti non concessi alla pagina: si mostra il testo e si prova la copia classica
+      box.value = text; box.hidden = false; box.select();
+      const copied = document.execCommand("copy");
+      say("claudeMsg", copied ? "Copiato: incollalo in una chat con Claude." : "Copia il testo qui sotto (Ctrl+C).", !copied);
+    }
   }
   if (act === "save-ocr") guard("ocrSaveMsg", async () => {
     const ocr = formOcr();
     if (ocr.kind === "server" && (!ocr.base_url || !ocr.model)) throw new Error("Scrivi indirizzo e nome del modello, o scegli un OCR trovato.");
-    say("ocrSaveMsg", "salvo e provo l'OCR…");
+    if (ocr.kind === "local" && (!ocr.model_path || !ocr.mmproj_path || !ocr.llama_server)) throw new Error("Servono modello, parte visiva e llama-server: premi «Cerca gli OCR sul computer».");
+    say("ocrSaveMsg", ocr.kind === "local" ? "salvo, accendo l'OCR e lo provo… la prima volta può volerci mezzo minuto" : "salvo e provo l'OCR…");
     settings = await post("/api/admin/settings", { ocr });
-    ocrChoice = null;
-    ocrProbe = ocr.kind !== "minicpm" || settings.ocr_engine.status === "ready" ? await post("/api/admin/ocr/test") : null;
+    ocrChoice = ocrFolders = null;
+    ocrProbe = ocr.kind ? await post("/api/admin/ocr/test") : null;
     renderSettings(); say("ocrSaveMsg", "Salvato."); refreshStatus();
   });
-  if (act === "ocr-install") guard("ocrSaveMsg", async () => { await post("/api/admin/ocr/install"); loadSettings(); });
   if (act === "save-index") guard("indexMsg", async () => { settings = await post("/api/admin/settings", { index: { concurrency: $("concurrency").value } }); renderSettings(); say("indexMsg", "Salvato."); });
   if (act === "retry") { await post("/api/admin/retry-errors").catch(() => {}); await refreshStatus(); loadSettings(); }
   if (act === "quit" && confirm("Chiudere LLMWiki? La lettura dei documenti in corso riprenderà al prossimo avvio.")) { await post("/api/admin/quit").catch(() => {}); document.body.innerHTML = '<p style="padding:40px">LLMWiki è stato chiuso. Puoi chiudere questa finestra.</p>'; }

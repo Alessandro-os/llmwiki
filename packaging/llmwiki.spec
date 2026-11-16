@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import (collect_data_files, collect_dynamic_libs,
                                      collect_submodules, copy_metadata)
 
 ROOT = SPECPATH + "/.."
-datas = [(ROOT + "/src/llmwiki/web", "llmwiki/web")]
+datas = [(ROOT + "/src/llmwiki/web", "llmwiki/web"), (ROOT + "/src/llmwiki/ocr_catalog.json", "llmwiki")]
 binaries, hiddenimports = [], []
 # mcp.cli richiede typer (non serve all'app) e fa fallire l'analisi: resta fuori.
 SKIP = ("mcp.cli", "onnxruntime.transformers", "onnxruntime.quantization", "onnxruntime.tools")

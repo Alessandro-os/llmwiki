@@ -36,10 +36,13 @@ Che cosa l'app non fa o non garantisce nella versione 0.5.0. Gli sviluppi possib
   - **Scrittura a mano:** MiniCPM-OCR ne legge circa la metà delle parole (45% su sei pagine
     di prova). Il resto esce storpiato, in modo riconoscibile: le citazioni su quelle righe di
     solito non vengono confermate.
-  - **Scaricamento:** serve scaricare 1,7 GB la prima volta.
+  - **Installazione a mano:** l'app non scarica l'OCR; va scaricato una volta, seguendo la
+    [guida](12-installare-un-ocr.md) (circa 1,8 GB per MiniCPM-OCR con llama.cpp).
   - **Velocità:** senza scheda video libera, 30-50 secondi a pagina.
-  - **Non verificato:** la versione Vulkan di llama.cpp scaricata dall'app non è stata provata
-    su questo PC; le misure sono state fatte con la versione CUDA.
+  - **Non verificato:** le misure sono state fatte con llama.cpp in versione CUDA; le versioni
+    Vulkan e solo processore non sono state provate su questo PC.
+  - **Ricerca:** gli OCR locali si cercano fino a 6 livelli di cartelle sotto quelle note; un
+    modello più in profondità va indicato con la sua cartella in "Altre cartelle dove cercare".
   - **Cambio di modo:** cambiando il modo dello spazio, i documenti già letti non si rileggono
     da soli; si rileggono uno per uno con "Rileggi".
 - **Immagini, tabelle complesse, formule in immagine** dentro PDF e Word non vengono lette.

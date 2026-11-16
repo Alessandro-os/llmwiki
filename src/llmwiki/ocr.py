@@ -47,13 +47,25 @@ class OcrError(Exception):
 
 
 class Ocr:
+    """Un OCR qualunque: riceve l'immagine di una pagina e restituisce il testo. Con `parts` > 1 la
+    pagina si legge a strisce orizzontali, una dopo l'altra (`strips`)."""
+
     name = "OCR"
 
-    def __init__(self, dpi: int = 200) -> None:
-        self.dpi = dpi
+    def __init__(self, dpi: int = 200, parts: int = 0) -> None:
+        self.dpi, self.parts = dpi, parts
         self.page_fraction = 0.0  # quanta parte della pagina in lettura è fatta (per l'avanzamento)
 
     def read(self, png: bytes) -> str:
+        pieces = strips(png, self.parts) if self.parts > 1 else [png]
+        texts = []
+        for number, piece in enumerate(pieces):
+            self.page_fraction = number / len(pieces)
+            texts.append(self.read_piece(piece))
+        self.page_fraction = 0.0
+        return "\n".join(texts)
+
+    def read_piece(self, png: bytes) -> str:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -62,17 +74,44 @@ class Ocr:
 
 class ServerOcr(Ocr):
     def __init__(self, base_url: str, model: str, api_key: str = "", dpi: int = 200,
-                 timeout: float = 600.0, transport=None, prompt: str = "") -> None:
+                 timeout: float = 600.0, transport=None, prompt: str = "", parts: int = 0,
+                 start_command: str = "") -> None:
         import httpx
 
-        super().__init__(dpi)
+        super().__init__(dpi, parts)
         self.name = model
         self.base_url, self.model = base_url.rstrip("/"), model
         self.prompt = prompt or PROMPT  # gli OCR specializzati vogliono la loro ("Text Recognition:")
+        self.start_command = start_command  # uno script che accende l'OCR se è spento
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._http = httpx.Client(timeout=timeout, headers=headers, transport=transport)
 
-    def read(self, png: bytes) -> str:
+    def read_piece(self, png: bytes) -> str:
+        try:
+            return self._request(png)
+        except OcrError as exc:
+            if not (exc.unavailable and self.start_command and self._start()):
+                raise
+            return self._request(png)
+
+    def _start(self) -> bool:
+        """Lancia il comando di avvio e aspetta che l'OCR risponda (fino a 5 minuti: i modelli
+        grandi impiegano a caricarsi). Il comando resta acceso anche dopo: lo spegne chi lo usa."""
+        import httpx
+
+        log.info("OCR spento: lo accendo con %s", self.start_command)
+        subprocess.Popen(self.start_command, shell=True, creationflags=NO_WINDOW)
+        deadline = time.monotonic() + 300
+        while time.monotonic() < deadline:
+            try:
+                if self._http.get(self.base_url + "/models", timeout=3).status_code == 200:
+                    return True
+            except httpx.HTTPError:
+                pass
+            time.sleep(2)
+        return False
+
+    def _request(self, png: bytes) -> str:
         import httpx
 
         image = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
@@ -129,7 +168,10 @@ class ServerOcr(Ocr):
 # il testo: con le coordinate la somiglianza al testo vero scendeva da 0,93 a 0,78 (misura 16/11).
 # Unlimited OCR aggiunge anche segnali di struttura (`<PAGE><BLOCK>…<FORK>`), che vanno tolti
 # prima delle coordinate: altrimenti `<BLOCK>text[…]` non comincia la riga e le coordinate restano.
-_BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>|<(?:PAGE|BLOCK|FORK)>", re.S)
+# Coordinate e segnali che alcuni OCR mettono nel testo: DeepSeek-OCR (<|ref|>, <|det|>),
+# Unlimited OCR (<PAGE> <BLOCK> <FORK>), MiniCPM-OCR ([Non-Text] per una zona senza scritte).
+_BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>|<(?:PAGE|BLOCK|FORK)>|\[Non-Text\]", re.S)
+MIN_STRIP = 200  # pixel: a 200 dpi 2,5 cm, due o tre righe di scrittura
 _BOX_PREFIX = re.compile(r"^[a-z_]+\[\d+(?:,\s*\d+){3}\]", re.M)
 
 
@@ -141,6 +183,9 @@ def strips(png: bytes, parts: int = 4) -> list[bytes]:
     from PIL import Image
 
     image = Image.open(io.BytesIO(png))
+    parts = min(parts, image.height // MIN_STRIP)  # un ritaglio basso non si taglia: righe spezzate
+    if parts < 2:
+        return [png]
     gray = np.asarray(image.convert("L"), dtype=np.int16)
     ink = (gray < 110).sum(axis=1)  # inchiostro scuro: la quadrettatura chiara non conta
     height = gray.shape[0]
@@ -179,13 +224,13 @@ def clean_text(text: str) -> str:
     return _BOX_PREFIX.sub("", _BOX_TAGS.sub("", text)).strip()
 
 
-class TesseractOcr(Ocr):
+class TesseractOcr(Ocr):  # legge la pagina intera: le strisce servono ai modelli, non a Tesseract
     def __init__(self, path: str, language: str = "ita+eng", dpi: int = 200) -> None:
         super().__init__(dpi)
         self.path, self.language = path, language
         self.name = f"Tesseract ({language})"
 
-    def read(self, png: bytes) -> str:
+    def read_piece(self, png: bytes) -> str:
         try:
             done = subprocess.run([self.path, "stdin", "stdout", "-l", self.language], input=png,
                                   capture_output=True, timeout=300, creationflags=NO_WINDOW)
@@ -199,18 +244,21 @@ class TesseractOcr(Ocr):
 
 
 def make_ocr(cfg: OcrConfig) -> Ocr | None:
-    """L'OCR collegato nelle impostazioni, o None se non ce n'è uno."""
-    if cfg.kind == "minicpm":
-        from .minicpm import ManagedOcr  # qui per non legare i due moduli all'avvio
+    """L'OCR scelto nelle impostazioni, o None se non ce n'è uno."""
+    if cfg.kind == "local" and cfg.model_path:
+        from .ocr_local import LocalOcr  # qui: ocr_local dipende da questo modulo
 
-        return ManagedOcr(configured_server=cfg.llama_server, dpi=cfg.dpi)
+        return LocalOcr(cfg.llama_server, cfg.model_path, cfg.mmproj_path, cfg.prompt or PROMPT,
+                        cfg.strips, cfg.dpi, cfg.name)
     if cfg.kind == "server" and cfg.base_url and cfg.model:
         key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
-        return ServerOcr(cfg.base_url, cfg.model, key, cfg.dpi)
+        engine = ServerOcr(cfg.base_url, cfg.model, key, cfg.dpi, prompt=cfg.prompt, parts=cfg.strips,
+                           start_command=cfg.start_command)
+        engine.name = cfg.name or cfg.model
+        return engine
     if cfg.kind == "tesseract" and cfg.path:
         return TesseractOcr(cfg.path, cfg.language, cfg.dpi)
     return None
-
 
 # ---------------------------------------------------------------- prova e ricerca
 

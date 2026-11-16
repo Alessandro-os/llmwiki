@@ -49,7 +49,7 @@ class FakeOcr(Ocr):
         super().__init__(dpi=50)
         self.fail, self.pages = fail, 0
 
-    def read(self, png: bytes) -> str:
+    def read_piece(self, png: bytes) -> str:
         if self.fail:
             raise self.fail
         self.pages += 1
@@ -108,6 +108,7 @@ def test_layout_coordinates_are_removed():
     page = ("<PAGE><BLOCK>text[35, 15, 299, 35]<FORK>STATICA DEI FLUIDI\n"
             "<BLOCK>equation[59, 639, 619, 675]<FORK>$$p = p(x,y,z)$$")  # pagina vera, 16/11
     assert ocr.clean_text(page) == "STATICA DEI FLUIDI\n$$p = p(x,y,z)$$"
+    assert ocr.clean_text("[Non-Text] CARNOT 1824 [Non-Text]") == "CARNOT 1824"  # MiniCPM-OCR, 16/11
 
 
 def test_probe_accepts_only_an_ocr_that_really_reads():
@@ -154,7 +155,7 @@ def test_without_a_working_ocr_the_document_waits_instead_of_failing(tmp_path):
         wiki = Wiki(cfg)
         status = await wiki.indexer.run_once()
         assert status["ready"] == 1 and status["pending"] == 1 and status["error"] == 0
-        assert status["waiting_ocr"] and "non è scaricato" in status["waiting"]  # MiniCPM-OCR
+        assert status["waiting_ocr"] and "Nessun OCR collegato" in status["waiting"]
         await wiki.aclose()
 
         wiki = Wiki(cfg)  # OCR collegato ma spento a metà
@@ -197,7 +198,7 @@ def test_each_document_can_be_read_its_own_way(tmp_path):
         wiki.indexer.ocr = FakeOcr()
         status = await wiki.indexer.run_once()
         assert status["error"] == 1 and "OCR" in wiki.store.get_doc("appunti.pdf")["error"]
-        wiki.store.set_method("appunti.pdf", "ocr")  # "Rileggi con MiniCPM-OCR"
+        wiki.store.set_method("appunti.pdf", "ocr")  # "Rileggi con l'OCR"
         status = await wiki.indexer.run_once()
         assert status["ready"] == 1 and wiki.store.get_doc("appunti.pdf")["method"] == "ocr"
         await wiki.aclose()
@@ -233,94 +234,140 @@ def test_strips_cut_between_lines_of_writing():
     page.save(buffer, format="PNG")
     pieces = [Image.open(io.BytesIO(piece)) for piece in ocr.strips(buffer.getvalue(), 4)]
     assert len(pieces) == 4 and sum(p.height for p in pieces) == 800
+    assert ocr.strips(ocr.sample_image(), 4) == [ocr.sample_image()]  # una riga sola: non si taglia
     edge = 0
     for piece in pieces[:-1]:  # nessun taglio cade dentro una riga
         edge += piece.height
         assert not any(top <= edge <= top + 30 for top in lines)
 
 
-def test_minicpm_starts_on_the_gpu_if_there_is_room_else_on_the_cpu(tmp_path, monkeypatch):
-    from llmwiki import minicpm
+def gguf(path, size: int = 1000) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as handle:
+        handle.truncate(size)
 
-    for name, (size, _) in minicpm.MODEL_FILES.items():
-        with (tmp_path / name).open("wb") as handle:
-            handle.truncate(size)  # file della dimensione giusta, vuoti: bastano per "installato"
-    server = tmp_path / "programma" / "llama-server.exe"
-    server.parent.mkdir()
-    server.write_bytes(b"")
-    assert minicpm.installed(tmp_path)
+
+def test_local_ocrs_are_found_and_recognised(tmp_path, monkeypatch):
+    """Come sono sistemati davvero sul PC di sviluppo: MiniCPM-OCR con il suo file di bozza, un
+    modello generico che vede le immagini, un modello che non le vede, llama-server a parte."""
+    from llmwiki import ocr_local
+
+    minicpm = tmp_path / "llama.cpp" / "modelli" / "MiniCPM-OCR-1.0"
+    gguf(minicpm / "MiniCPM-OCR-1_0-Q8_0.gguf")
+    gguf(minicpm / "mmproj-model-f16-4x.gguf")
+    gguf(minicpm / "MiniCPM-OCR-1_0-dspark-draft.gguf")  # accelera, non è un modello da usare
+    gguf(tmp_path / "Qwen visione" / "qwen-vl-7b.gguf")
+    gguf(tmp_path / "Qwen visione" / "mmproj-qwen-vl.gguf")
+    gguf(tmp_path / "solo testo" / "llama-3-8b.gguf")  # senza mmproj non vede le immagini
+    monkeypatch.setattr(ocr_local, "default_folders", lambda: [])
+    monkeypatch.setattr(ocr_local.shutil, "which", lambda name: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "vuota"))
+
+    found = app_module.find_local_ocr(str(tmp_path))
+    assert [f["name"] for f in found] == ["MiniCPM-OCR", "qwen-vl-7b"]  # il consigliato prima
+    best, other = found
+    assert best["recommended"] and best["prompt"] == "Text Recognition:" and best["strips"] == 4
+    assert best["mmproj_path"].endswith("mmproj-model-f16-4x.gguf")
+    assert not other["known"] and other["strips"] == 0 and "inventare" in other["good_for"]
+    assert not best["ok"] and "llama-server" in best["error"]  # manca il programma che lo fa girare
+
+    server = tmp_path / "llama.cpp" / "programma" / "llama-server.exe"
+    gguf(server)
+    found = app_module.find_local_ocr(f"  ;{tmp_path};")  # cartelle scritte a mano, con spazi
+    assert all(f["ok"] and f["llama_server"] == str(server) for f in found)
+
+
+def test_local_ocr_starts_on_the_gpu_if_there_is_room_else_on_the_cpu(tmp_path, monkeypatch):
+    from llmwiki import ocr_local
+
+    files = [tmp_path / name for name in ("llama-server.exe", "MiniCPM-OCR-1_0-Q8_0.gguf", "mmproj.gguf")]
+    for path in files:
+        gguf(path)
     tried, gpu = [], {"fails": False}
 
-    def fake_start(self, program, extra):
+    def fake_start(self, extra):
         tried.append("gpu" if "99" in extra else "cpu")
-        self._client = ServerOcr("http://ocr.test/v1", "minicpm-ocr", transport=vision_server(), prompt=minicpm.PROMPT)
+        self._client = ServerOcr("http://ocr.test/v1", "ocr", transport=vision_server(), prompt=self.prompt)
         return tried[-1] == "cpu" or not gpu["fails"]
 
-    monkeypatch.setattr(minicpm.ManagedOcr, "_start", fake_start)
-    monkeypatch.setattr(minicpm.ManagedOcr, "_stop", lambda self: None)
+    monkeypatch.setattr(ocr_local.LocalOcr, "_start", fake_start)
+    monkeypatch.setattr(ocr_local.LocalOcr, "_stop", lambda self: None)
     for free, fails, expected in ((8000, False, ["gpu"]), (900, False, ["cpu"]), (8000, True, ["gpu", "cpu"])):
         tried.clear()
         gpu["fails"] = fails
-        monkeypatch.setattr(minicpm, "free_gpu_mb", lambda free=free: free)
-        engine = minicpm.ManagedOcr(tmp_path)
-        engine.read(ocr.sample_image())
+        monkeypatch.setattr(ocr_local, "free_gpu_mb", lambda free=free: free)
+        engine = ocr_local.LocalOcr(*map(str, files), prompt="Text Recognition:")
+        assert engine.read(ocr.sample_image()) == "CARNOT 1824"
         assert tried == expected
-        assert engine.name.endswith("(processore)" if expected[-1] == "cpu" else "(scheda video)")
+        assert engine.name == "MiniCPM-OCR (" + ("processore" if expected[-1] == "cpu" else "scheda video") + ")"
         engine.close()
 
+    files[1].unlink()  # modello cancellato o spostato: il documento aspetta, con il passo da fare
+    engine = ocr_local.LocalOcr(*map(str, files), prompt="")
+    with pytest.raises(OcrError, match="Cerca gli OCR") as missing:
+        engine.read(ocr.sample_image())
+    assert missing.value.unavailable
+    engine.close()
 
-def test_minicpm_download_is_verified_and_resumable(tmp_path, monkeypatch):
-    import hashlib
-    import zipfile
 
-    from llmwiki import minicpm
-
-    model, mmproj = b"modello finto", b"proiettore finto"
-    bundle = io.BytesIO()
-    with zipfile.ZipFile(bundle, "w") as archive:
-        archive.writestr("llama-server.exe", b"programma finto")
-    files = {"/m.gguf": model, "/p.gguf": mmproj, "/llama.zip": bundle.getvalue()}
-    monkeypatch.setattr(minicpm, "MODEL_FILES", {
-        "MiniCPM-OCR-1_0-Q8_0.gguf": (len(model), hashlib.sha256(model).hexdigest()),
-        "mmproj-model-f16-4x.gguf": (len(mmproj), hashlib.sha256(mmproj).hexdigest())})
-    monkeypatch.setattr(minicpm, "LLAMA_ZIP", ("https://x/llama.zip", len(files["/llama.zip"]),
-                                               hashlib.sha256(files["/llama.zip"]).hexdigest()))
+def test_a_server_ocr_that_is_off_is_started_with_its_command(tmp_path):
+    flag = tmp_path / "acceso.txt"
 
     def handler(request: httpx.Request) -> httpx.Response:
-        name = "/m.gguf" if "Q8_0" in request.url.path else "/p.gguf" if "mmproj" in request.url.path else "/llama.zip"
-        return httpx.Response(200, content=files[name])
+        if not flag.exists():
+            return httpx.Response(503, text="spento")
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "ocr"}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "CARNOT 1824"}}]})
 
-    install = minicpm.Install(tmp_path, client=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
-    install._run()
-    assert install.status()["status"] == "ready", install.state
-    assert (tmp_path / "programma" / "llama-server.exe").read_bytes() == b"programma finto"
-    assert not (tmp_path / "llama.cpp.zip").exists()
+    off = ServerOcr("http://ocr.test/v1", "ocr", transport=httpx.MockTransport(handler))
+    with pytest.raises(OcrError):
+        off.read(b"png")  # senza comando di avvio resta un OCR spento
+    started = ServerOcr("http://ocr.test/v1", "ocr", transport=httpx.MockTransport(handler),
+                        start_command=f'echo acceso > "{flag}"')
+    assert started.read(b"png") == "CARNOT 1824" and flag.exists()
 
 
 def test_search_lists_what_reads_first(monkeypatch):
     async def servers():
-        return [{"name": "SGLang", "base_url": "http://127.0.0.1:10000/v1", "models": ["cieco", "Unlimited-OCR-2"]}]
+        return [{"name": "SGLang", "base_url": "http://127.0.0.1:10000/v1", "models": ["cieco", "PaddleOCR-VL-1.6"]}]
 
-    def server_ocr(base_url, model, api_key="", dpi=200, timeout=600.0, transport=None):
-        return ServerOcr(base_url, model, transport=vision_server(sees=model != "cieco"))
+    def server_ocr(base_url, model, **options):
+        return ServerOcr(base_url, model, transport=vision_server(sees=model != "cieco"), prompt=options.get("prompt", ""))
 
+    local = {"kind": "local", "name": "MiniCPM-OCR", "ok": True, "recommended": True}
     monkeypatch.setattr(app_module, "detect_local_servers", servers)
+    monkeypatch.setattr(app_module, "find_local_ocr", lambda folders: [local])
     monkeypatch.setattr(ocr, "ServerOcr", server_ocr)
     monkeypatch.setattr(ocr, "find_tesseract", lambda: [])
     found = asyncio.run(app_module.detect_ocr())
-    assert [(f["model"], f["ok"]) for f in found] == [("Unlimited-OCR-2", True), ("cieco", False)]
+    assert [(f["name"], f["ok"]) for f in found] == [
+        ("MiniCPM-OCR", True), ("PaddleOCR-VL-1.6 su SGLang", True), ("cieco su SGLang", False)]
+    assert found[1]["prompt"] == "OCR:" and found[1]["strips"] == 4  # riconosciuto dal catalogo
+    assert found[2]["prompt"] == ""
 
 
 def test_ocr_settings_from_the_ui(tmp_path):
     cfg = Config.from_dict({"llm": {"provider": "mock"}, "verify": {"judge": "llm"}}, tmp_path)
     cfg.save()
     with TestClient(create_app(Wiki(Config.load(cfg.path))), **LOCAL) as client:
+        settings = client.get("/api/admin/settings").json()
+        assert settings["ocr_catalog"]["ocr"][0]["recommended"] and settings["ocr_folder"].endswith("ocr")
         assert client.post("/api/admin/ocr/test").json()["ok"] is False  # niente collegato
+        assert client.post("/api/admin/ocr/install").status_code in (404, 405)  # l'app non scarica OCR
         saved = client.post("/api/admin/settings", json={"ocr": {
-            "mode": "ocr", "kind": "server", "base_url": "http://127.0.0.1:10000/v1", "model": "Unlimited-OCR-2"}})
-        assert saved.status_code == 200 and saved.json()["ocr"]["model"] == "Unlimited-OCR-2"
+            "mode": "ocr", "kind": "server", "base_url": "http://127.0.0.1:10000/v1", "model": "Unlimited-OCR-2",
+            "start_command": "C:\\AI\\accendi ocr.cmd"}})
+        assert saved.status_code == 200 and saved.json()["ocr"]["start_command"].endswith("ocr.cmd")
+        local = client.post("/api/admin/settings", json={"ocr": {
+            "kind": "local", "name": "MiniCPM-OCR", "model_path": "m.gguf", "mmproj_path": "p.gguf",
+            "llama_server": "llama-server.exe", "strips": 4, "folders": "D:\\modelli"}})
+        assert local.status_code == 200 and local.json()["ocr"]["strips"] == 4
         assert client.post("/api/admin/settings", json={"ocr": {"mode": "boh"}}).status_code == 400
-    assert Config.load(cfg.path).ocr.kind == "server"
+        assert client.post("/api/admin/settings", json={"ocr": {"kind": "minicpm"}}).status_code == 400
+        assert client.post("/api/admin/settings", json={"ocr": {"strips": 99}}).status_code == 400
+    saved = Config.load(cfg.path).ocr
+    assert saved.kind == "local" and saved.folders == "D:\\modelli" and saved.name == "MiniCPM-OCR"
 
 
 @pytest.mark.skipif(not ocr.tesseract_places(), reason="Tesseract non installato")

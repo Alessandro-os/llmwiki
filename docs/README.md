@@ -73,3 +73,4 @@ ramo in cui cadono.
 | [9. Per chi sviluppa](09-sviluppo.md) | Mappa del codice, test, banco di prova, costruzione dell'installer |
 | [10. Limiti noti](10-limiti-noti.md) | Che cosa l'app non fa o non garantisce oggi |
 | [11. Quale modello locale usare](11-scelta-del-modello.md) | Il ragionamento per scegliere il modello su un dato PC, con i conti da rifare quando cambia l'hardware |
+| [12. Installare un OCR](12-installare-un-ocr.md) | Che cosa scaricare per leggere scansioni e appunti a mano, e come collegarlo |

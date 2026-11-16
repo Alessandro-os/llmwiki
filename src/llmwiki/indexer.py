@@ -389,6 +389,8 @@ class Indexer:
             progress.pages = total
             progress.total += total - 1  # l'estrazione contava come un passo solo
         progress.done = done
+        if progress.engine:  # dopo la prima pagina il nome dice dove gira (scheda video o processore)
+            progress.ocr = progress.engine.name
 
     async def _summarize(self, path: str, lines: list[str]) -> str:
         """Scrive la scheda. La quantità di testo per richiesta parte dall'impostazione, tiene

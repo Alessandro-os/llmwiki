@@ -24,7 +24,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import __version__
+from . import __version__, apphome
 from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, detect_ocr, save_secret
 from .config import LOOPBACK, Config
 from .extract import SUPPORTED
@@ -32,6 +32,7 @@ from .icon import icon_bytes
 from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
 from .ocr import make_ocr
+from .ocr_local import catalog as ocr_catalog
 from .ocr import probe as probe_ocr
 from .store import METHODS, norm_path, sha_file
 from .tools import ToolError
@@ -44,7 +45,8 @@ EDITABLE = {
     "llm": {"provider", "base_url", "api_key_env", "agent_model", "summary_model", "judge_model",
             "send_reasoning_effort", "agent_effort", "summary_effort", "tool_mode", "context_tokens"},
     "index": {"concurrency", "fanout"},
-    "ocr": {"mode", "kind", "llama_server", "base_url", "model", "api_key_env", "path", "language"},
+    "ocr": {"mode", "kind", "name", "prompt", "strips", "folders", "model_path", "mmproj_path", "llama_server",
+            "base_url", "model", "api_key_env", "start_command", "path", "language"},
     "verify": {"enabled", "judge", "threshold"},
     "server": {"host", "port"},
 }
@@ -131,8 +133,10 @@ def apply_settings(cfg: Config, patch: dict) -> None:
         raise ValueError("la soglia deve stare tra 0 e 1")
     if not 1 <= cfg.index.concurrency <= 64 or not 2 <= cfg.index.fanout <= 64:
         raise ValueError("parallelismo tra 1 e 64, ampiezza dei gruppi tra 2 e 64")
-    if cfg.ocr.mode not in ("auto", "text", "ocr") or cfg.ocr.kind not in ("minicpm", "server", "tesseract"):
-        raise ValueError("ocr.mode: auto, text oppure ocr; ocr.kind: minicpm, server oppure tesseract")
+    if cfg.ocr.mode not in ("auto", "text", "ocr") or cfg.ocr.kind not in ("", "local", "server", "tesseract"):
+        raise ValueError("ocr.mode: auto, text oppure ocr; ocr.kind: local, server oppure tesseract")
+    if not 0 <= cfg.ocr.strips <= 12:
+        raise ValueError("ocr.strips: da 0 (pagina intera) a 12")
     if cfg.server.host not in LOOPBACK and not cfg.server.users:
         raise ValueError("per condividere in rete crea prima almeno un utente")
 
@@ -153,7 +157,8 @@ def _settings(hub: Hub) -> dict:
         "providers": PROVIDERS,
         "keys": _saved_keys(),
         "judge_model": hub.download.status(),
-        "ocr_engine": hub.ocr_install.status(cfg.ocr.llama_server),
+        "ocr_catalog": ocr_catalog(),
+        "ocr_folder": str(apphome.home() / "ocr"),
         "active_judge": hub.wiki.agent.verifier.judge_name,
         "docs_dir": str(cfg.docs_dir),
         "config_file": str(cfg.path or ""),
@@ -460,12 +465,6 @@ def _reading_routes(app: FastAPI, hub: Hub) -> None:
         hub.wiki.indexer.trigger()
         return {"doc": path, "method": hub.wiki.store.get_doc(path)["method"]}
 
-    @app.post("/api/admin/ocr/install")
-    async def ocr_install() -> dict:
-        """Scarica MiniCPM-OCR e llama.cpp (circa 1,7 GB): i PDF in attesa ripartono da soli."""
-        hub.ocr_install.start()
-        return hub.ocr_install.status(hub.wiki.cfg.ocr.llama_server)
-
     @app.post("/api/admin/update")
     async def update_app() -> dict:
         """Scarica e installa la versione nuova; poi l'app si chiude e l'installatore la riapre."""
@@ -479,8 +478,9 @@ def _ocr_routes(app: FastAPI, hub: Hub) -> None:
     """Cercare e provare gli OCR: solo dal computer dell'app."""
 
     @app.get("/api/admin/ocr/detect")
-    async def ocr_detect() -> dict:
-        return {"found": await detect_ocr()}
+    async def ocr_detect(folders: str | None = None) -> dict:
+        """`folders`: le cartelle scritte nella pagina, anche se non ancora salvate."""
+        return {"found": await detect_ocr(hub.wiki.cfg.ocr.folders if folders is None else folders)}
 
     @app.post("/api/admin/ocr/test")
     async def ocr_test() -> dict:

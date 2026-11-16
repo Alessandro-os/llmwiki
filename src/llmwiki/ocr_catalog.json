@@ -1,0 +1,37 @@
+{
+  "_nota": "Gli OCR che LLMWiki conosce: come riconoscerne i file, l'istruzione giusta, se leggere a strisce, per che cosa vanno bene. Un OCR che non è qui funziona lo stesso, con le impostazioni generiche. Si aggiorna con l'app. Misure: README, Confronto degli OCR (16/11/2026).",
+  "ocr": [
+    {
+      "id": "minicpm-ocr",
+      "name": "MiniCPM-OCR",
+      "files": ["minicpm-ocr"],
+      "prompt": "Text Recognition:",
+      "strips": 4,
+      "recommended": true,
+      "good_for": "Scansioni, foto, appunti a mano. Lo stampato lo legge quasi perfetto, la scrittura a mano circa a metà. Non inventa: quando non capisce scrive parole storpiate, che si riconoscono.",
+      "speed": "2-3 s a pagina con la scheda video libera, 30-50 s sul processore.",
+      "download": "https://huggingface.co/openbmb/MiniCPM-OCR-1.0-gguf",
+      "download_files": "MiniCPM-OCR-1_0-Q8_0.gguf e mmproj-model-f16-4x.gguf",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "paddleocr-vl",
+      "name": "PaddleOCR-VL",
+      "files": ["paddleocr-vl"],
+      "prompt": "OCR:",
+      "strips": 4,
+      "recommended": false,
+      "good_for": "Stampato. A mano legge meno di MiniCPM-OCR e, su pagine di soli disegni, tende a ripetersi (l'app lo ferma).",
+      "speed": "Il più veloce: circa 1,5 s a pagina con la scheda video.",
+      "download": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6-GGUF",
+      "download_files": "PaddleOCR-VL-1.6-GGUF.gguf e PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+      "license": "Apache-2.0"
+    }
+  ],
+  "generic": {
+    "prompt": "Trascrivi tutto il testo di questa pagina, esattamente com'è e nell'ordine di lettura. Scrivi solo il testo trascritto, senza commenti. Le formule scrivile in LaTeX.",
+    "strips": 0,
+    "good_for": "Un modello che vede le immagini ma non è un OCR conosciuto: va provato. I modelli generici (come Strata) possono inventare frasi e numeri."
+  },
+  "llama_cpp": "https://github.com/ggml-org/llama.cpp/releases"
+}

@@ -12,8 +12,9 @@ import json
 import os
 import re
 import secrets
+from pathlib import Path
 
-from . import apphome, minicpm, nli, ocr
+from . import apphome, nli, ocr, ocr_local
 from .agent import Answer, WikiAgent
 from .config import Config
 from .indexer import Indexer
@@ -146,19 +147,23 @@ async def detect_local_servers() -> list[dict]:
     return [server for server in found if server]
 
 
-async def detect_ocr() -> list[dict]:
-    """OCR sul computer che leggono davvero l'immagine di prova: i modelli che vedono le
-    immagini sui server locali e Tesseract. Chi non la legge resta nell'elenco con il motivo."""
+async def detect_ocr(extra_folders: str = "") -> list[dict]:
+    """Gli OCR sul computer: i modelli GGUF che vedono le immagini (l'app li accende da sola con
+    llama-server), i modelli accesi sui server locali che leggono davvero l'immagine di prova,
+    e Tesseract. Chi non funziona resta nell'elenco con il motivo."""
 
     def try_model(server: dict, model: str) -> dict:
-        engine = ocr.ServerOcr(server["base_url"], model, timeout=60)
+        entry = ocr_local.known(model)
+        engine = ocr.ServerOcr(server["base_url"], model, timeout=60, prompt=entry["prompt"])
         try:
             result = ocr.probe(engine)
         finally:
             engine.close()
         return {"kind": "server", "name": f"{model} su {server['name']}", "base_url": server["base_url"],
-                "model": model, "ok": result["ok"], "seconds": result["seconds"], "note": "",
-                "error": result["error"]}
+                "model": model, "prompt": entry["prompt"] if entry["id"] else "", "strips": entry["strips"],
+                "recommended": entry["recommended"] and result["ok"], "good_for": entry["good_for"],
+                "known": bool(entry["id"]),
+                "ok": result["ok"], "seconds": result["seconds"], "note": "", "error": result["error"]}
 
     async def try_server(server: dict) -> list[dict]:
         found = []
@@ -167,9 +172,25 @@ async def detect_ocr() -> list[dict]:
         return found
 
     servers = await detect_local_servers()
-    groups = await asyncio.gather(*(try_server(s) for s in servers), asyncio.to_thread(ocr.find_tesseract))
+    groups = await asyncio.gather(*(try_server(s) for s in servers), asyncio.to_thread(ocr.find_tesseract),
+                                  asyncio.to_thread(find_local_ocr, extra_folders))
     found = [item for group in groups for item in group]
-    return sorted(found, key=lambda item: not item["ok"])
+    return sorted(found, key=lambda item: (not item["ok"], not item.get("recommended"), not item.get("known")))
+
+
+def find_local_ocr(extra_folders: str = "") -> list[dict]:
+    """I modelli OCR GGUF nelle cartelle consuete e in quelle aggiunte, ciascuno con il
+    llama-server che lo farà girare. Non si accendono qui: costerebbe secondi e memoria per
+    ognuno; "Salva e prova" prova quello scelto."""
+    folders = ocr_local.default_folders() + [Path(f.strip()) for f in extra_folders.split(";") if f.strip()]
+    servers = ocr_local.find_llama_servers(folders)
+    found = []
+    for item in ocr_local.find_models(folders):
+        item.update(llama_server=servers[0] if servers else "", ok=bool(servers), seconds=0,
+                    note=f"{item['size_gb']} GB · l'app lo accende quando serve e lo spegne dopo 3 minuti",
+                    error="" if servers else "manca llama-server (il programma di llama.cpp che lo fa girare)")
+        found.append(item)
+    return found
 
 
 def use_local_server(cfg: Config, server: dict) -> None:
@@ -185,7 +206,6 @@ class Hub:
         self.wiki = wiki
         self.registry = registry  # presente solo nell'app desktop, che gestisce più spazi
         self.download = nli.Download()
-        self.ocr_install = minicpm.Install(configured_server=wiki.cfg.ocr.llama_server)
         self._judge: nli.NliJudge | None = wiki.agent.verifier.nli
         self._lock = asyncio.Lock()
         self._running = False

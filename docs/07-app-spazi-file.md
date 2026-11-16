@@ -124,8 +124,8 @@ Documenti\LLMWiki\Personale\
 ├── secrets.json       chiavi dei servizi online
 ├── models\mdeberta-v3-nli\   decision model (model.onnx, tokenizer.json)
 ├── aggiornamenti\     installatore della versione nuova, finché non è installata
-├── ocr\minicpm-ocr\   MiniCPM-OCR (modello, parte visiva, llama.cpp), se scaricato
-└── logs\llmwiki.log
+├── ocr\              cartella consigliata per gli OCR che scarichi tu (docs/12): l'app ci cerca da sola
+└── logs\llmwiki.log, logs\ocr.log   (ocr.log: i messaggi di llama-server quando l'app accende l'OCR)
 ```
 
 Il decision model è uno solo per tutti gli spazi e resta caricato in memoria una volta sola

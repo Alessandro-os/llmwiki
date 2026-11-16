@@ -52,53 +52,77 @@ Tre modi di leggere i PDF (Impostazioni → Lettura dei documenti, `[ocr] mode` 
 
 | Modo | Che cosa fa | Per |
 |---|---|---|
-| **Automatico** (predefinito) | Testo esatto se il PDF lo contiene; se non ne contiene (una scansione, appunti a mano), MiniCPM-OCR | quasi tutto |
+| **Automatico** (predefinito) | Testo esatto se il PDF lo contiene; se non ne contiene (una scansione, appunti a mano), l'OCR collegato | quasi tutto |
 | **Testo esatto** | Solo il testo che il PDF contiene: perfetto e istantaneo. Un PDF senza testo va in errore, e il messaggio dice di scegliere l'OCR | PDF nati al computer (Word, slide, LaTeX) |
-| **MiniCPM-OCR** | Ogni pagina letta come immagine, anche se il PDF contiene testo | scansioni con un testo nascosto sbagliato, pagine miste |
+| **OCR** | Ogni pagina letta come immagine, anche se il PDF contiene testo | scansioni con un testo nascosto sbagliato, pagine miste |
 
 Il modo dello spazio vale per i documenti nuovi. Ogni documento può averne uno suo:
 - al caricamento, con "Come leggere i PDF";
 - dopo, con "Rileggi" nella sua scheda (colonna `method` di `state.db`; vuota = quello dello spazio).
 
-La pagina ha una leggenda su chi fa meglio che cosa, che riassume le misure del README.
+Esempio: uno spazio "Studio" in Automatico, con dentro un PDF del professore che contiene un
+testo nascosto sbagliato. Lo spazio resta in Automatico; quel documento si rilegge con "OCR".
 
-**MiniCPM-OCR gestito dall'app** (`minicpm.py`).
+**Qualunque OCR, trovato sul computer.** L'app non dipende da un OCR preciso e **non scarica
+niente da sola**. "Cerca gli OCR sul computer" (`app.detect_ocr`) trova tre tipi di OCR:
 
-Scelto il 16/11/2026 tra sei OCR, su 12 pagine vere di appunti. È il migliore tra quelli che non inventano:
+| Tipo | Che cos'è | Come si trova |
+|---|---|---|
+| `local` | Un modello GGUF che vede le immagini (modello + parte visiva `mmproj`), che l'app accende da sola con `llama-server` di llama.cpp (`ocr_local.py`) | file nelle cartelle consuete: `%LOCALAPPDATA%\LLMWiki\ocr`, LM Studio, Hugging Face, `%LOCALAPPDATA%\llama.cpp`, più quelle aggiunte in "Altre cartelle dove cercare". `llama-server.exe` nel PATH, installato con winget o nelle stesse cartelle |
+| `server` | Un modello già acceso su un server con l'API compatibile OpenAI (Unlimited OCR, DeepSeek-OCR con SGLang o vLLM, llama.cpp, LM Studio) | i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000); ogni modello, fino a 6 per server, deve leggere un'immagine con la scritta `CARNOT 1824` |
+| `tesseract` | Il programma Tesseract installato | PATH e cartelle d'installazione consuete; deve leggere la stessa immagine |
+
+Si sceglie con "Usa questo", poi "Salva e prova" accende l'OCR e gli fa leggere l'immagine di
+prova. Se nelle impostazioni non c'è ancora un OCR, la ricerca parte da sola all'apertura della
+pagina.
+
+**Il catalogo** (`ocr_catalog.json`) dice che cosa l'app sa degli OCR conosciuti: come
+riconoscerne i file, l'istruzione giusta (`Text Recognition:` per MiniCPM-OCR, `OCR:` per
+PaddleOCR-VL), se leggere la pagina a strisce, per che cosa vanno bene e dove si scaricano. Da
+qui vengono la leggenda "Chi fa meglio che cosa" e l'OCR consigliato. Un OCR che il catalogo non
+conosce funziona lo stesso, con un'istruzione generica, e la ricerca avverte che i modelli
+generici possono inventare. Il catalogo si aggiorna con l'app.
+
+**Consigliato: MiniCPM-OCR.** Scelto il 16/11/2026 tra sei OCR, su 12 pagine vere di appunti
+(README, "Confronto degli OCR"). È il migliore tra quelli che non inventano:
 - sullo stampato è alla pari con Unlimited OCR 2, ma 30 volte più veloce;
 - a mano legge circa la metà delle parole.
 
-I modelli generici che vedono le immagini, come Strata, leggevano di più a mano, ma inventano frasi e numeri. Per questo non sono proposti.
+I modelli generici che vedono le immagini, come Strata, leggevano di più a mano, ma inventano
+frasi e numeri. Per questo non sono consigliati.
 
-- **Scaricamento.** "Scarica (1,7 GB)" scarica il modello GGUF ufficiale (Q8_0) e la sua parte visiva da `openbmb/MiniCPM-OCR-1.0-gguf`, a revisione fissa. Scarica anche llama.cpp b12364 in versione Vulkan (36 MB), che usa la scheda video di qualunque marca. Ogni file è controllato con la sua impronta SHA-256, e lo scaricamento riprende se si interrompe. Tutto va in `%LOCALAPPDATA%\LLMWiki\ocr\minicpm-ocr`. In "Opzioni avanzate" si può indicare un `llama-server.exe` già installato.
-- **Accensione.** Alla prima pagina da leggere l'app avvia `llama-server`:
-  - sulla scheda video, se ha almeno 3 GB liberi: 2-3 s a pagina;
-  - altrimenti sul processore: 30-50 s a pagina, senza togliere memoria al modello che risponde;
-  - se sulla scheda video non parte, riprova sul processore.
+**Se non c'è nessun OCR pronto**, la pagina lo dice e consiglia l'OCR migliore del catalogo:
+i link per scaricare llama.cpp e il modello, i tre passi, la [guida completa](12-installare-un-ocr.md)
+e un tasto "Copia il messaggio per Claude", che copia una richiesta d'aiuto già scritta da
+incollare in una chat. Un PDF da leggere con l'OCR intanto aspetta, e in basso a sinistra c'è
+scritto dove collegarlo; appena l'OCR c'è, la lettura riparte da sola.
 
-  Dopo 3 minuti senza pagine da leggere si spegne. La scheda del documento dice dove ha girato: «MiniCPM-OCR (processore)».
-- **Lettura a strisce.** Ogni pagina è tagliata in 4 strisce orizzontali, dove c'è meno inchiostro (`ocr.strips`), e le strisce sono lette una dopo l'altra. Su sei pagine di appunti a mano le parole giuste passano dal 37% al 45%. L'istruzione è quella ufficiale, `Text Recognition:`.
-- **Se manca.** Un PDF da leggere con l'OCR aspetta, e in basso a sinistra c'è scritto di scaricare MiniCPM-OCR. Appena è scaricato, la lettura riparte da sola.
+**OCR locale (`local`), acceso dall'app.** Alla prima pagina da leggere l'app avvia `llama-server`:
+- sulla scheda video, se ha almeno 3 GB liberi: 2-3 s a pagina con MiniCPM-OCR;
+- altrimenti sul processore: 30-50 s a pagina, senza togliere memoria al modello che risponde;
+- se sulla scheda video non parte, riprova sul processore.
 
-**Un altro OCR** (Opzioni avanzate). L'app non dipende da MiniCPM: si può collegare qualunque OCR (`ocr.py`).
+Dopo 3 minuti senza pagine da leggere si spegne. La scheda del documento dice dove ha girato:
+«MiniCPM-OCR (processore)». I messaggi di `llama-server` vanno in `logs\ocr.log`.
 
-| Tipo | Che cos'è | Esempi |
-|---|---|---|
-| server | Un modello che legge immagini, con l'API compatibile OpenAI | Unlimited OCR, PaddleOCR-VL, DeepSeek-OCR con SGLang, vLLM o llama.cpp |
-| tesseract | Il programma Tesseract installato | Tesseract 5 |
+**OCR su un server (`server`), con il comando che lo accende.** In "Opzioni avanzate" si può
+scrivere un comando, per esempio uno script `.cmd`. Se il server non risponde, l'app lancia il
+comando e aspetta fino a 5 minuti che risponda (`ServerOcr._start`). Il server resta acceso
+anche dopo: lo spegne chi lo usa.
 
-"Cerca altri OCR sul computer":
-- interroga i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000);
-- prova ogni modello, fino a 6 per server, con un'immagine che contiene la scritta `CARNOT 1824`;
-- propone solo chi la legge davvero.
+**Lettura a strisce.** Gli OCR piccoli leggono meglio la pagina tagliata in strisce
+orizzontali, dove c'è meno inchiostro (`ocr.strips`). Per MiniCPM-OCR, 4 strisce: su sei pagine
+di appunti a mano le parole giuste passano dal 37% al 45%. Il numero sta nel catalogo e si può
+cambiare in "Opzioni avanzate" (0 = pagina intera). Un'immagine bassa non si taglia: ogni striscia è alta
+almeno 200 pixel (2,5 cm a 200 dpi), altrimenti le righe verrebbero spezzate.
 
 **Per tutti gli OCR:**
 - le pagine diventano immagini a 200 dpi (pypdfium2), una alla volta;
-- ogni pagina, e per MiniCPM ogni striscia, fa avanzare la percentuale (2.9);
+- ogni pagina, e ogni striscia, fa avanzare la percentuale (2.9);
 - il testo letto diventa righe numerate e citabili, come quello estratto;
 - ogni documento ricorda l'OCR che l'ha letto (colonna `ocr`);
 - il testo arriva a pezzi, e se un tratto di 80 caratteri si ripete 4 volte la lettura si ferma (`ocr.loop_start`): alcuni OCR, davanti a pagine di soli disegni, ripetono la stessa riga all'infinito;
-- coordinate e segnali di impaginazione (Unlimited OCR, DeepSeek-OCR) vengono tolti (`ocr.clean_text`);
+- coordinate e segnali di impaginazione (Unlimited OCR, DeepSeek-OCR) e il segnale `[Non-Text]` di MiniCPM-OCR per le zone senza scritte vengono tolti (`ocr.clean_text`);
 - se l'OCR è spento o occupato, il documento aspetta e l'app riprova ogni minuto.
 Il testo viene poi normalizzato: le righe più lunghe di 240 caratteri sono spezzate tra una
 parola e l'altra, le righe vuote consecutive diventano una sola, le vuote in fondo spariscono.

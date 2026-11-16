@@ -19,7 +19,7 @@ SECTIONS = ("llm", "index", "ocr", "verify", "agent", "server")
 NOTES = {
     "llm": "provider: anthropic | openai (qualunque server compatibile: Strata, Ollama, LM Studio) | mock",
     "index": "concurrency: richieste al modello in parallelo; fanout: elementi riassunti da ogni nodo",
-    "ocr": "mode: auto | text (testo del PDF) | ocr; kind: minicpm | server (altro OCR) | tesseract",
+    "ocr": "mode: auto | text (testo del PDF) | ocr; kind: local (GGUF acceso dall'app) | server | tesseract",
     "verify": "judge: auto | nli | llm; threshold: confidenza minima per accettare una citazione",
     "agent": "max_steps: letture al massimo per domanda; explorers: sotto-agenti in parallelo",
     "server": "host 0.0.0.0 espone l'app in rete (serve almeno un utente in [server.users])",
@@ -64,13 +64,21 @@ class OcrConfig:
     # scansione, appunti a mano), passa all'OCR; "text" solo il testo del file; "ocr" sempre l'OCR.
     # Un documento può avere il suo modo (colonna `method` di state.db), che vince su questo.
     mode: str = "auto"
-    # "minicpm": MiniCPM-OCR gestito dall'app (minicpm.py); "server": un altro OCR acceso su un
-    # server con API OpenAI; "tesseract": Tesseract installato
-    kind: str = "minicpm"
-    llama_server: str = ""  # kind "minicpm": un llama-server.exe già installato, al posto di scaricarlo
+    # Quale OCR (scelto dall'elenco di "Cerca gli OCR sul computer"): "local" un modello GGUF che
+    # l'app accende con llama-server (ocr_local.py); "server" un OCR su un server con API OpenAI;
+    # "tesseract" Tesseract installato; "" nessuno.
+    kind: str = ""
+    name: str = ""          # come chiamarlo nell'interfaccia e nelle schede
+    prompt: str = ""        # l'istruzione per l'OCR ("" = generica); il catalogo la sa per i noti
+    strips: int = 0         # pagina letta a strisce orizzontali (0 = intera): aiuta gli OCR piccoli
+    folders: str = ""       # cartelle in più dove cercare gli OCR, separate da ";"
+    model_path: str = ""    # kind "local": il modello GGUF
+    mmproj_path: str = ""   # kind "local": la sua parte visiva
+    llama_server: str = ""  # kind "local": il llama-server.exe che lo fa girare
     base_url: str = ""      # kind "server"
     model: str = ""         # kind "server"
     api_key_env: str = ""   # kind "server": variabile con la chiave, se il server la chiede
+    start_command: str = ""  # kind "server": comando che lo accende se è spento (uno script .cmd)
     path: str = ""          # kind "tesseract": percorso di tesseract.exe
     language: str = "ita+eng"  # kind "tesseract": lingue installate da usare
     dpi: int = 200          # risoluzione a cui le pagine diventano immagini
