@@ -115,6 +115,18 @@ Documenti\LLMWiki\Personale\
 - L'app tiene aperto uno spazio alla volta: cambiando spazio, la lettura dei documenti
   dell'altro si ferma e riprende quando ci torni.
 
+### Copia di sicurezza
+
+In Impostazioni → Spazi, "Fai una copia di sicurezza" scrive un file zip in
+`Documenti\LLMWiki\Copie di sicurezza\<spazio>-<data>.zip` (`backup.py`). Dentro ci sono i
+documenti, l'indice (schede, mappe, stato: rifarli può costare ore di modello) e `wiki.toml`,
+quindi anche i token degli utenti creati per la condivisione. Non ci sono le chiavi dei servizi
+online, che stanno fuori dagli spazi. La copia si può fare mentre l'app legge.
+
+Lo zip è già uno spazio completo. "Ripristina da una copia" lo estrae in una cartella nuova e
+lo apre come spazio nuovo: non sovrascrive mai uno spazio esistente, e rifiuta uno zip che non
+è una copia di LLMWiki o che contiene percorsi fuori dalla cartella.
+
 ## 7.6 Che cosa sta fuori dagli spazi
 
 ```

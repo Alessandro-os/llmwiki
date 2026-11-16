@@ -55,3 +55,11 @@ def test_decision_model_keeps_its_quality():
     assert metrics["false_accepts"] == 0   # mai accettare una citazione sbagliata
     assert metrics["false_rejects"] <= 2   # quelle giuste respinte passano al giudice successivo
     assert metrics["auc"] >= 0.98
+
+
+def test_formulas_written_in_latex_count_as_the_same_answer():
+    """Confronto del 15/11: tre risposte giuste contate sbagliate perché scritte come formule."""
+    assert evals_run._matches(r"Il rapporto vale $\frac{5}{2}$.", "5/2")
+    assert evals_run._matches(r"Il coefficiente è $0{,}40$", "0,40|0.40")
+    assert evals_run._matches("La penale è del 2%", "3%|2%")
+    assert not evals_run._matches(r"vale $\frac{5}{3}$", "5/2")

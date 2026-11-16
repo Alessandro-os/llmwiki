@@ -22,6 +22,14 @@ Per chi la usa:
 - Uno spazio nuovo parte anche con l'OCR dello spazio attuale.
 - Un aggiornamento scaricato per intero ma interrotto prima del controllo non resta più bloccato.
 - Il registro non si riempie più degli avvisi di pypdf.
+- L'OCR riprende dalla pagina a cui era arrivato: se si spegne, o chiudi l'app, a metà di un
+  documento lungo, le pagine già lette non si rifanno. Dopo la prima pagina compare il tempo
+  che manca.
+- Copia di sicurezza: in Impostazioni → Spazi un tasto mette documenti, indice e impostazioni
+  dello spazio in un file zip; "Ripristina da una copia" lo riapre come spazio nuovo.
+- Un modello generico trovato tra gli OCR è segnato "sconsigliato" e chiede conferma: può
+  inventare il testo.
+- Un documento tolto mentre veniva letto non ricompare più nella ricerca.
 
 Per chi sviluppa:
 
@@ -34,6 +42,10 @@ Per chi sviluppa:
   `pages`. `/api/admin/ocr/detect` restituisce anche `searched`.
 - `ocr_local.search_folders` è l'unico posto che dice dove si cercano gli OCR.
 - `download.fetch_verified` non chiede niente al server se il file `.part` è già completo.
+- `extract.PageCache` e `Ocr.identity`: pagine dell'OCR messe da parte in `.indice/pages/`.
+- `backup.py` e le rotte `/api/admin/backup` e `/api/admin/restore`.
+- Banco di prova: le formule in LaTeX contano come il testo (`\frac{5}{2}` = "5/2").
+- I controlli su GitHub girano anche sui rami `claude/**`.
 
 ## 0.5.0 · 2026-11-16
 

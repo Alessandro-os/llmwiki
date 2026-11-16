@@ -123,7 +123,9 @@ almeno 200 pixel (2,5 cm a 200 dpi), altrimenti le righe verrebbero spezzate.
 - ogni documento ricorda l'OCR che l'ha letto (colonna `ocr`);
 - il testo arriva a pezzi, e se un tratto di 80 caratteri si ripete 4 volte la lettura si ferma (`ocr.loop_start`): alcuni OCR, davanti a pagine di soli disegni, ripetono la stessa riga all'infinito;
 - coordinate e segnali di impaginazione (Unlimited OCR, DeepSeek-OCR) e il segnale `[Non-Text]` di MiniCPM-OCR per le zone senza scritte vengono tolti (`ocr.clean_text`);
-- se l'OCR è spento o occupato, il documento aspetta e l'app riprova ogni minuto.
+- se l'OCR è spento o occupato, il documento aspetta e l'app riprova ogni minuto;
+- ogni pagina letta viene messa da parte in `.indice/pages/` (`extract.PageCache`): se l'OCR si spegne o l'app viene chiusa a metà documento, alla ripresa si riparte dalla pagina a cui era arrivato. Le pagine valgono solo per lo stesso file e lo stesso OCR con le stesse impostazioni (`Ocr.identity`), e si cancellano quando il documento è finito, modificato o tolto;
+- dopo la prima pagina letta, in basso a sinistra compare il tempo che manca, calcolato dai secondi a pagina misurati su quel documento.
 Il testo viene poi normalizzato: le righe più lunghe di 240 caratteri sono spezzate tra una
 parola e l'altra, le righe vuote consecutive diventano una sola, le vuote in fondo spariscono.
 Righe corte servono a citare intervalli stretti.

@@ -300,6 +300,55 @@ def test_the_text_is_not_read_again_when_the_model_was_off(tmp_path, monkeypatch
     asyncio.run(scenario())
 
 
+def test_the_ocr_resumes_from_the_page_it_had_reached(tmp_path):
+    """L'OCR si spegne a metà documento: alla ripresa le pagine già lette non si rifanno, e a
+    documento finito quelle messe da parte spariscono."""
+    cfg = ocr_cfg(tmp_path)
+    cfg.docs_dir.mkdir(parents=True)
+    scanned_pdf(cfg.docs_dir / "appunti.pdf", pages=4)
+
+    class Fragile(FakeOcr):
+        def read_piece(self, png):
+            if self.pages == 3 and self.fail:
+                raise self.fail
+            self.pages += 1
+            return f"Appunti di termodinamica, pagina letta dall'OCR numero {self.pages}."
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.indexer.ocr = engine = Fragile(OcrError("OCR spento", unavailable=True))
+        status = await wiki.indexer.run_once()
+        assert status["pending"] == 1 and status["waiting_ocr"] and engine.pages == 3
+        assert len(list(wiki.store.pages_root.rglob("*.txt"))) == 3
+
+        engine.fail, wiki.indexer._resume_at = None, 0.0
+        status = await wiki.indexer.run_once()
+        assert status["ready"] == 1 and engine.pages == 4  # solo la pagina che mancava
+        text = "\n".join(wiki.store.read_lines("appunti.pdf"))
+        assert all(f"=== Pagina {n} ===" in text for n in (1, 2, 3, 4)) and "numero 4" in text
+        assert not list(wiki.store.pages_root.rglob("*.txt"))
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_pages_read_by_another_ocr_are_not_reused(tmp_path):
+    a, b = FakeOcr(), FakeOcr()
+    b.dpi = 300
+    assert a.identity() != b.identity() and a.identity() == FakeOcr().identity()
+    assert ServerOcr("http://x/v1", "uno").identity() != ServerOcr("http://x/v1", "due").identity()
+
+
+def test_a_document_removed_while_being_read_does_not_come_back_in_the_search(tmp_path):
+    cfg = ocr_cfg(tmp_path, mode="text")
+    wiki = Wiki(cfg)
+    wiki.store.upsert_pending("nota.txt", "sha", 1, 1.0)
+    wiki.store.delete_doc("nota.txt")
+    wiki.store.index_text("nota.txt", ["La pompa P-101 ha una portata di 40 metri cubi."])  # il thread in ritardo
+    assert wiki.tools.search("pompa")["results"] == []
+    asyncio.run(wiki.aclose())
+
+
 def test_reading_method_from_upload_and_from_the_document_card(tmp_path):
     cfg = ocr_cfg(tmp_path, mode="text")
     cfg.save()

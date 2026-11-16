@@ -312,3 +312,46 @@ def test_decision_model_cascade(tmp_path):
     filler = "Questa clausola riguarda aspetti amministrativi generali del rapporto. " * 120
     assert judge.score("La penale è del 2% per ogni settimana di ritardo.",
                        filler + "La penale è del 2% del valore dell'ordine per ogni settimana di ritardo.") > 0.6
+
+
+def test_backup_and_restore_of_a_space(tmp_path, monkeypatch):
+    """La copia è uno zip che è già uno spazio: si ripristina come spazio nuovo, con le schede
+    già fatte (il modello non deve rileggere niente) e senza toccare gli spazi che ci sono."""
+    import zipfile
+
+    from llmwiki import backup
+
+    monkeypatch.setattr(apphome, "default_spaces_root", lambda: tmp_path / "spazi")
+    registry = apphome.Registry()
+    registry.add("Studio", tmp_path / "Studio", template=mock_cfg(tmp_path))
+    docs = tmp_path / "Studio" / "documenti" / "fisica à"
+    docs.mkdir(parents=True)
+    (docs / "carnot è.md").write_text(NOTE, encoding="utf-8")
+    hub = Hub(Wiki(Config.load(tmp_path / "Studio" / "wiki.toml")), registry)
+    with TestClient(create_app(hub), **LOCAL) as client:
+        wait_ready(client, 1)
+        made = client.post("/api/admin/backup").json()
+        with zipfile.ZipFile(made["file"]) as archive:
+            names = archive.namelist()
+        assert "wiki.toml" in names and "documenti/fisica à/carnot è.md" in names and ".indice/state.db" in names
+        assert not any(n.endswith(("-wal", ".tmp", ".part")) for n in names)
+        assert [p.name for p in Path(made["file"]).parent.iterdir()] == [Path(made["file"]).name]
+
+        calls = dict(hub.wiki.llm.calls)
+        restored = client.post("/api/admin/restore", json={"file": made["file"], "name": "Studio ripristinato"})
+        assert restored.status_code == 200, restored.text
+        status = wait_ready(client, 1)
+        assert status["space"] == restored.json()["id"] and len(status["spaces"]) == 2
+        assert client.get("/api/search", params={"q": "rendimento"}).json()["results"]
+        assert dict(hub.wiki.llm.calls) != calls or not hub.wiki.llm.calls.get("doc")  # nessuna scheda rifatta
+
+        again = client.post("/api/admin/restore", json={"file": made["file"], "name": "Studio ripristinato"})
+        assert again.status_code == 400 and "esiste già" in again.json()["error"]
+        bad = tmp_path / "cattivo.zip"
+        with zipfile.ZipFile(bad, "w") as archive:
+            archive.writestr("wiki.toml", "")
+            archive.writestr("../fuori.txt", "x")
+        escaped = client.post("/api/admin/restore", json={"file": str(bad), "name": "Cattivo"})
+        assert escaped.status_code == 400 and not (tmp_path / "spazi" / "fuori.txt").exists()
+        assert not (tmp_path / "spazi" / "Cattivo").exists()
+    assert backup.backups_dir() == tmp_path / "spazi" / "Copie di sicurezza"

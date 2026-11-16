@@ -98,7 +98,7 @@ class Registry:
         space_id, n = slug, 2
         while self.get(space_id):
             space_id, n = f"{slug}-{n}", n + 1
-        folder = Path(path).expanduser() if path else default_spaces_root() / _safe_folder(name)
+        folder = Path(path).expanduser() if path else default_spaces_root() / safe_folder(name)
         folder = folder.resolve()
         if any(Path(s["path"]) == folder for s in self.spaces):
             raise ValueError(f"la cartella {folder} è già uno spazio")
@@ -129,6 +129,6 @@ class Registry:
         self.save()
 
 
-def _safe_folder(name: str) -> str:
+def safe_folder(name: str) -> str:
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name).strip(" .")
     return cleaned or "Spazio"

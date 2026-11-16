@@ -24,7 +24,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import __version__, apphome
+from . import __version__, apphome, backup
 from .app import PROVIDERS, Hub, Wiki, add_user, detect_local_servers, detect_ocr, save_secret
 from .config import LOOPBACK, Config
 from .extract import SUPPORTED
@@ -432,6 +432,29 @@ def _admin_routes(app: FastAPI, hub: Hub) -> None:
     @app.post("/api/admin/spaces/switch")
     async def switch_space(body: dict) -> dict:
         return await hub.switch_space(str(body.get("id", "")))
+
+    @app.post("/api/admin/backup")
+    async def make_backup() -> dict:
+        """Copia di sicurezza dello spazio aperto: documenti, indice e impostazioni in uno zip."""
+        wiki = hub.wiki
+        active = hub.registry.active() if hub.registry else None
+        name = active["name"] if active else wiki.cfg.root.name
+        file = await asyncio.to_thread(backup.create, wiki.cfg, wiki.store, name)
+        return {"file": str(file), "mb": round(file.stat().st_size / 1e6, 1)}
+
+    @app.post("/api/admin/restore")
+    async def restore_backup(body: dict) -> dict:
+        """Ripristina una copia come spazio nuovo (quelli esistenti non si toccano) e lo apre."""
+        spaces = registry()
+        name = str(body.get("name", "")).strip()
+        file = Path(str(body.get("file", "")).strip().strip('"'))
+        if not name:
+            raise ValueError("serve un nome per lo spazio ripristinato")
+        folder = apphome.default_spaces_root() / apphome.safe_folder(name)
+        await asyncio.to_thread(backup.restore, file, folder)
+        space = spaces.add(name, folder)
+        await hub.switch_space(space["id"])
+        return space
 
     @app.delete("/api/admin/spaces/{space_id}")
     async def remove_space(space_id: str) -> dict:

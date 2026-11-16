@@ -227,7 +227,7 @@ function readingHtml(reading, queue) {
   const others = queue - reading.length;
   const text = reading.find((r) => r.phase !== "card"), card = reading.some((r) => r.phase === "card");
   const parts = [];
-  if (text) parts.push("Testo: " + (text.ocr ? esc(text.ocr) + (text.pages ? " · pagina " + text.page + " di " + text.pages : "") : "dal file"));
+  if (text) parts.push("Testo: " + (text.ocr ? esc(text.ocr) + (text.pages ? " · pagina " + text.page + " di " + text.pages + (text.remaining ? " · ancora circa " + duration(text.remaining) : "") : "") : "dal file"));
   if (card) parts.push("Scheda: " + esc(S.reader));
   if (others > 0) parts.push("in coda altri " + others);
   html += '<span class="muted">' + parts.join(" · ") + "</span>";
@@ -572,6 +572,8 @@ const GUIDE_URL = "https://github.com/Alessandro-os/llmwiki/blob/main/docs/12-in
 let ocrChoice = null, ocrFound = null, ocrSearched = [], ocrProbe = null, ocrScanned = false, ocrFolders = null;  // ocrFolders: scritte ma non salvate
 const readingOptions = (current, withSpace) => (withSpace ? opt("", "Come dice lo spazio", current) : "") +
   opt("auto", "Automatico: testo esatto se c'è, altrimenti l'OCR", current) + opt("text", "Testo esatto (dal PDF)", current) + opt("ocr", "OCR (scansioni, appunti a mano)", current);
+// Un modello che vede le immagini ma non è nel catalogo: sulle pagine vere ha inventato testo (README, Misure).
+const risky = (f) => f.kind !== "tesseract" && !f.known;
 function legend(catalog) {
   return '<div class="legend small"><b>Chi fa meglio che cosa</b>' +
     "<div><b>Testo esatto</b> · PDF nati al computer (Word, slide, LaTeX): perfetto e istantaneo. Non legge scansioni né appunti a mano.</div>" +
@@ -590,8 +592,9 @@ function ocrList() {
     (f.ok && f.seconds ? ' <span class="muted small">legge l\'immagine di prova in ' + f.seconds + " s</span>" : "") +
     (f.good_for ? '<br><span class="muted small">' + esc(f.good_for) + "</span>" : "") +
     (f.note ? '<br><span class="muted small">' + esc(f.note) + "</span>" : "") +
-    (f.ok ? "" : '<br><span class="warn small">' + esc(f.error) + "</span>") + "</span>" +
-    (f.ok ? '<button data-act="ocr-use" data-i="' + i + '">Usa questo</button>' : "") + "</div>").join("");
+    (f.ok ? "" : '<br><span class="warn small">' + esc(f.error) + "</span>") +
+    (f.ok && risky(f) ? '<br><span class="warn small">Sconsigliato: non è un OCR conosciuto e può inventare il testo.</span>' : "") + "</span>" +
+    (f.ok ? '<button data-act="ocr-use" data-i="' + i + '"' + (risky(f) ? ' class="link">Usa lo stesso' : ">Usa questo") + "</button>" : "") + "</div>").join("");
 }
 // Nessun OCR che funzioni: si consiglia il migliore del catalogo, con i link, i passi e il
 // messaggio da dare a Claude (o a un altro assistente) per farsi aiutare. Niente si scarica da solo.
@@ -687,7 +690,12 @@ function renderSettings() {
       '<div class="field"><label for="threshold">Quanto deve essere sicuro per confermare (da 0 a 1)</label><input type="number" id="threshold" min="0.05" max="0.95" step="0.05" value="' + esc(s.verify.threshold) + '"></div>' +
       '<div class="row"><button data-act="save-verify">Salva</button><span id="verifyMsg" class="small"></span></div></div></details></div>' +
 
-    (s.desktop ? '<div class="card"><h3>Spazi</h3><p class="muted small" style="margin:0">Uno spazio è una raccolta separata di documenti: per esempio uno per lo studio e uno per il lavoro. Si cambia dal menu in alto a sinistra.</p><div class="row"><input type="text" id="newSpace" placeholder="Nome del nuovo spazio, per esempio: Studio" style="flex:1;min-width:200px"><button data-act="add-space">Crea</button></div><span id="spaceMsg" class="small"></span><div class="small muted">I documenti di questo spazio sono in <code>' + esc(s.docs_dir) + "</code></div></div>" : "") +
+    (s.desktop ? '<div class="card"><h3>Spazi</h3><p class="muted small" style="margin:0">Uno spazio è una raccolta separata di documenti: per esempio uno per lo studio e uno per il lavoro. Si cambia dal menu in alto a sinistra.</p><div class="row"><input type="text" id="newSpace" placeholder="Nome del nuovo spazio, per esempio: Studio" style="flex:1;min-width:200px"><button data-act="add-space">Crea</button></div><span id="spaceMsg" class="small"></span><div class="small muted">I documenti di questo spazio sono in <code>' + esc(s.docs_dir) + "</code></div>" +
+      '<h3>Copia di sicurezza</h3><p class="muted small" style="margin:0">Documenti, indice e impostazioni di questo spazio in un solo file zip, da tenere su un altro disco. Le chiavi dei servizi online non ci sono.</p>' +
+      '<div class="row"><button data-act="backup">Fai una copia di sicurezza</button><span id="backupMsg" class="small"></span></div>' +
+      "<details><summary>Ripristina da una copia</summary><div style=\"display:grid;gap:12px\">" + field("restoreFile", "File della copia (.zip)", "", "text", "Il percorso completo del file, per esempio quello scritto dopo aver fatto la copia.") +
+      field("restoreName", "Nome del nuovo spazio", "", "text", "La copia diventa uno spazio nuovo: quelli che hai non vengono toccati.") +
+      '<div class="row"><button data-act="restore">Ripristina</button><span id="restoreMsg" class="small"></span></div></div></details></div>' : "") +
 
     '<div class="card"><h3>Usarla con altre persone</h3><p class="muted small" style="margin:0">Le altre persone aprono LLMWiki dal loro browser e vedono gli stessi documenti. Ognuna riceve un codice personale (token).</p>' +
       (s.users.length ? s.users.map((u) => '<div class="row"><span style="flex:1">' + esc(u) + '</span><button data-act="del-user" data-name="' + esc(u) + '">Rimuovi</button></div>').join("") : "") +
@@ -765,6 +773,14 @@ $("settingsPage").addEventListener("click", async (event) => {
   });
   if (act === "download") guard("verifyMsg", async () => { await post("/api/admin/model/download"); loadSettings(); });
   if (act === "save-verify") guard("verifyMsg", async () => { settings = await post("/api/admin/settings", { verify: { judge: $("judge").value, threshold: $("threshold").value } }); renderSettings(); say("verifyMsg", "Salvato."); });
+  if (act === "backup") guard("backupMsg", async () => {
+    say("backupMsg", "copio… con molti documenti può volerci qualche minuto"); event.target.disabled = true;
+    try { const made = await post("/api/admin/backup"); say("backupMsg", "Copia fatta (" + made.mb + " MB): " + made.file); } finally { event.target.disabled = false; }
+  });
+  if (act === "restore") guard("restoreMsg", async () => {
+    say("restoreMsg", "ripristino…");
+    await post("/api/admin/restore", { file: $("restoreFile").value, name: $("restoreName").value }); await afterSwitch(); show("docs");
+  });
   if (act === "add-space") guard("spaceMsg", async () => { await post("/api/admin/spaces", { name: $("newSpace").value }); await afterSwitch(); show("docs"); });
   if (act === "add-user") guard("shareMsg", async () => { shownToken = await post("/api/admin/users", { name: $("newUser").value.trim() }); await loadSettings(); });
   if (act === "del-user") guard("shareMsg", async () => { await api("/api/admin/users/" + encodeURIComponent(event.target.dataset.name), { method: "DELETE" }); shownToken = null; await loadSettings(); });
@@ -779,7 +795,9 @@ $("settingsPage").addEventListener("click", async (event) => {
     say("ocrMsg", good ? good + (good === 1 ? " OCR pronto: premi «Usa questo»." : " OCR pronti: scegline uno.") : "Nessun OCR pronto sul computer.", !good);
   });
   if (act === "ocr-use") {
-    const f = ocrFound[+event.target.dataset.i]; ocrChoice = f;
+    const f = ocrFound[+event.target.dataset.i];
+    if (risky(f) && !confirm("«" + f.name + "» non è un OCR conosciuto: un modello generico può inventare frasi e numeri, e le citazioni verrebbero controllate su un testo inventato. Lo uso lo stesso?")) return;
+    ocrChoice = f;
     renderSettings();
     say("ocrMsg", "Scelto " + f.name + ": premi «Salva e prova».");
   }

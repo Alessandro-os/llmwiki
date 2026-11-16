@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import shutil
 import sys
 import time
@@ -87,8 +88,16 @@ def cmd_judge(args) -> int:
     return 0
 
 
+def _plain(text: str) -> str:
+    """Le formule scritte in LaTeX contano come il testo: `\\frac{5}{2}` è "5/2" e `0{,}40` è
+    "0,40". Nel confronto del 15/11 tre risposte giuste erano contate sbagliate per questo."""
+    text = re.sub(r"\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"\1/\2", text)
+    text = re.sub(r"\\[,;:! ]|\$", "", text)
+    return re.sub(r"\{([^{}]*)\}", r"\1", text).lower()
+
+
 def _matches(text: str, needle: str) -> bool:
-    return any(option.lower() in text.lower() for option in needle.split("|"))
+    return any(_plain(option) in _plain(text) for option in needle.split("|"))
 
 
 class Probe:

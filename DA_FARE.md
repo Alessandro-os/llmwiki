@@ -89,7 +89,7 @@ In ordine di importanza, secondo me.
   - Forse il menu è stato cambiato dopo il trascinamento: in quel caso conta il valore al
     momento del caricamento, e va detto meglio nell'interfaccia (per esempio: "letto con:
     Automatico" nel messaggio dopo il caricamento).
-- [ ] **Mai un modello generico come OCR.** Strata, o un altro modello che vede le immagini, inventa il testo:
+- [x] **Mai un modello generico come OCR.** *(segnato sconsigliato, con conferma; Automatico usa l'OCR scelto da te)* Strata, o un altro modello che vede le immagini, inventa il testo:
   - misurato sulle pagine vere (vedi Misure nel README);
   - la ricerca degli OCR lo mostra come "sconsigliato: può inventare il testo";
   - non è sceglibile con un clic, né usato da Automatico.
@@ -118,7 +118,7 @@ In ordine di importanza, secondo me.
 - [ ] **Riconoscere il testo nascosto delle scansioni.**
   - Un PDF in cui ogni pagina è un'unica immagine, con sopra il testo invisibile messo dallo
     scanner: in Automatico va letto con l'OCR, non con quel testo, che è spesso pessimo.
-- [ ] **Stima del tempo prima di partire,** dalle pagine e dai secondi misurati: 2-3 s a pagina
+- [x] **Stima del tempo** *(fatta dopo la prima pagina, dai secondi misurati; l'avviso sui PDF grandi resta da fare)* **prima di partire,** dalle pagine e dai secondi misurati: 2-3 s a pagina
   sulla scheda video, 30-50 s sul processore. Per un PDF grande (49 MB, 433 KB di testo)
   avvisare che le schede richiedono molto.
 - [x] **Registro più pulito.** *(fatto il 16/11)* Gli avvisi di pypdf ("wrong pointing object", "fontTools is
@@ -133,8 +133,8 @@ In ordine di importanza, secondo me.
 - Sul modo "auto" al posto di "OCR": il caricamento salva il modo giusto (c'è il test), quindi
   nel database "auto" può arrivare solo da un caricamento fatto con "Automatico" o da "Rileggi".
   L'ipotesi più probabile resta il menu cambiato dopo il trascinamento. Resta da provare a mano.
-- [ ] Un documento cancellato proprio mentre viene letto può restare nella ricerca (le righe
-  scritte da un thread dopo la cancellazione). Raro; non corretto.
+- [x] Un documento cancellato proprio mentre viene letto può restare nella ricerca *(corretto, con test)* (le righe
+  scritte da un thread dopo la cancellazione).
 - [x] Il caricamento calcola l'impronta del file bloccando il server (qualche decimo di secondo
   per 49 MB). Corretto.
 - [x] Uno scaricamento finito ma interrotto prima del controllo (aggiornamento, decision model)
@@ -143,19 +143,25 @@ In ordine di importanza, secondo me.
   domanda: ora l'agente riceve un errore e prosegue.
 - [x] Uno spazio nuovo non ereditava l'OCR scelto nello spazio attuale: corretto, con test.
 
-**Proposte nuove (in ordine di utilità, secondo me)**
+**Fatto il 16/11, terzo giro**
 
-- [ ] **Riprendere l'OCR dalla pagina a cui era arrivato.** Oggi se l'OCR si spegne a pagina 80
-  di 100 si riparte da 1. Basta salvare le pagine lette man mano.
+- [x] L'OCR riprende dalla pagina a cui era arrivato, e mostra il tempo che manca (misurato sul
+  documento, non stimato prima).
+- [x] Copia di sicurezza di uno spazio in uno zip, e ripristino come spazio nuovo.
+- [x] I test girano su GitHub (Windows) anche sui rami di lavoro, non solo su `main`: il
+  controllo automatico c'era già, me n'ero dimenticato.
+- [x] Un modello generico trovato dalla ricerca degli OCR è segnato "sconsigliato" e chiede
+  conferma prima di essere usato.
+
+**Proposte ancora aperte**
+
 - [ ] **Schede solo quando servono.** Il testo è cercabile subito; la scheda di un PDF da 49 MB
   costa molto. Si potrebbe rispondere già con la sola ricerca e scrivere le schede di notte o
-  a richiesta ("Leggi a fondo").
-- [ ] **Un tasto "Copia la diagnosi"** in Impostazioni: versione, modello, OCR, ultime righe del
-  registro, senza contenuti dei documenti. Serve a chi lo prova e deve dirci che cosa non va.
-- [ ] **Controllo automatico su GitHub a ogni push** (ruff e pytest): gratis per i repository
-  pubblici, evita di pubblicare una versione con i test rossi.
-- [ ] **Copia di sicurezza di uno spazio** in un file zip, e ripristino: lo chiederà la prima
-  azienda, e protegge anche te.
+  a richiesta. Non fatto: cambia come l'agente trova le risposte, quindi va misurato con il
+  banco di prova e il modello vero, prima e dopo.
+- [ ] **Spegnere da sola l'OCR e il modello dell'app se l'app si blocca.** Oggi, se LLMWiki
+  viene chiusa di forza, `llama-server` dell'OCR può restare acceso e tenere la scheda video.
+  Si risolve su Windows legando il processo all'app: va provato su Windows.
 
 ## Sviluppi possibili
 
@@ -174,7 +180,7 @@ In ordine di importanza, secondo me.
   Proposta: per llama.cpp spegnere il ragionamento solo per le schede, dove la misura dà un
   indice 5 volte più veloce e nessun errore. Oppure dire nell'interfaccia che l'opzione vale
   solo per Strata.
-- [ ] **Il banco di prova non riconosce le formule.** "5/2" scritto `\frac{5}{2}` e "0,40"
+- [x] **Il banco di prova non riconosce le formule.** *(corretto, con test)* "5/2" scritto `\frac{5}{2}` e "0,40"
   scritto `0{,}40` contano come risposte sbagliate. È capitato 3 volte nel confronto del 15
   novembre: le risposte erano giuste.
 - [ ] **Livelli di approfondimento della risposta** (idea tua, da fare dopo il confronto dei

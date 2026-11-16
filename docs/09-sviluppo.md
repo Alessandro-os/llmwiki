@@ -31,6 +31,7 @@ sopra.
       ├── config.py                 wiki.toml: voci, predefiniti, lettura e scrittura
       ├── update.py ── download.py  aggiornamenti da GitHub · scaricamento verificato (anche nli.py)
       ├── apphome.py                cartella dell'app, registro degli spazi
+      ├── backup.py                 copia di sicurezza di uno spazio in uno zip, e ripristino
       └── icon.py                   l'icona: area di notifica, finestra, eseguibile
  web/index.html                     l'interfaccia: una pagina, senza dipendenze né build
 ```

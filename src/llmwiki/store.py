@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import json
 import os
 import re
@@ -131,6 +132,7 @@ class Store:
         self.text_dir = wiki_dir / "text"
         self.summary_dir = wiki_dir / "summaries"
         self.tree_dir = wiki_dir / "tree"
+        self.pages_root = wiki_dir / "pages"  # pagine lette dall'OCR, finché il documento non è finito
         for directory in (docs_dir, self.text_dir, self.summary_dir, self.tree_dir):
             directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
@@ -183,6 +185,16 @@ class Store:
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, target)
 
+    def pages_dir(self, sha: str, ocr_identity: str) -> Path:
+        return self.pages_root / f"{sha[:32]}-{sha_text(ocr_identity)[:8]}"
+
+    def drop_pages(self, sha: str) -> None:
+        """Il documento è stato letto per intero, tolto o modificato: le pagine messe da parte
+        non servono più."""
+        if sha and self.pages_root.is_dir():
+            for folder in self.pages_root.glob(f"{sha[:32]}-*"):
+                shutil.rmtree(folder, ignore_errors=True)
+
     def read_lines(self, path: str) -> list[str]:
         return self.text_file(path).read_text(encoding="utf-8").split("\n")
 
@@ -217,6 +229,8 @@ class Store:
                     (path, folder, seq, sha, size, mtime, time.time()),
                 )
             else:
+                if row["sha"] != sha:
+                    self.drop_pages(row["sha"])
                 self.db.execute(
                     "UPDATE docs SET sha=?, size=?, mtime=?, status='pending', error='',"
                     " attempts=0, updated=? WHERE path=?",
@@ -285,6 +299,9 @@ class Store:
             self.db.execute("UPDATE fts SET path=? WHERE path=?", (new, old))
 
     def delete_doc(self, path: str) -> None:
+        row = self.get_doc(path)
+        if row:
+            self.drop_pages(row["sha"])
         with self.lock:
             self.db.execute("DELETE FROM docs WHERE path=?", (path,))
             self.db.execute("DELETE FROM fts WHERE path=?", (path,))
@@ -406,6 +423,8 @@ class Store:
 
     def _replace_fts(self, path: str, kind: str, rows: list[tuple]) -> None:
         with self.lock:
+            if self.get_doc(path) is None:
+                return  # tolto mentre un thread lo stava leggendo: non deve ricomparire nella ricerca
             self.db.execute("BEGIN")
             try:
                 self.db.execute("DELETE FROM fts WHERE path=? AND kind=?", (path, kind))

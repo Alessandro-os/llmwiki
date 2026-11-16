@@ -2,7 +2,7 @@ name: Controlli
 
 on:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]  # anche i rami di lavoro: i test su Windows girano solo qui
   pull_request:
 
 jobs:

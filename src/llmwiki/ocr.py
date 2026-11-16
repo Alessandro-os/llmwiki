@@ -68,6 +68,12 @@ class Ocr:
     def read_piece(self, png: bytes) -> str:
         raise NotImplementedError
 
+    def identity(self) -> str:
+        """Che cosa distingue questo OCR da un altro: le pagine lette e messe da parte valgono
+        solo per lo stesso OCR con le stesse impostazioni."""
+        details = [str(getattr(self, key, "")) for key in ("label", "model", "base_url", "prompt", "language", "path")]
+        return "|".join([type(self).__name__, str(self.dpi), str(self.parts), *details])
+
     def close(self) -> None:
         pass
 

@@ -23,7 +23,7 @@ from pathlib import Path
 
 from . import prompts
 from .config import Config
-from .extract import ExtractError, NoTextError, extract_lines, is_supported, numbered
+from .extract import ExtractError, NoTextError, PageCache, extract_lines, is_supported, numbered
 from .llm import LLM, LLMError
 from .ocr import OcrError, make_ocr
 from .store import Store, map_id, node_id, sha_file, sha_text
@@ -62,6 +62,17 @@ class Progress:
     phase: str = "text"    # "text" mentre si legge il testo, "card" mentre il modello scrive la scheda
 
     engine: object = None  # l'OCR in uso: dice quanta parte della pagina corrente ha letto
+    cache: PageCache | None = None  # pagine ritrovate già lette: non contano nella stima del tempo
+    ocr_started: float = 0.0
+
+    def remaining(self) -> int:
+        """Secondi che mancano alla fine dell'OCR, dai secondi a pagina misurati finora (0 = non
+        si sa ancora). Si misura qui e non si stima a priori: tra scheda video e processore la
+        velocità cambia di dieci volte."""
+        read = self.done - (self.cache.hits if self.cache else 0)
+        if self.phase != "text" or not self.pages or read < 1:
+            return 0
+        return round((time.monotonic() - self.ocr_started) / read * (self.pages - self.done))
 
     def percent(self) -> int:
         part = getattr(self.engine, "page_fraction", 0.0) if self.pages and self.done < self.pages else 0.0
@@ -211,7 +222,8 @@ class Indexer:
         counts["text_waiting"] = self.store.text_waiting()
         counts["reading"] = [
             {"path": path, "percent": p.percent(), "seconds": round(p.seconds()), "model": p.model,
-             "ocr": p.ocr, "phase": p.phase, "page": min(p.done + 1, p.pages), "pages": p.pages}
+             "ocr": p.ocr, "phase": p.phase, "page": min(p.done + 1, p.pages), "pages": p.pages,
+             "remaining": p.remaining()}
             for path, p in list(self.reading.items())
         ]
         counts["last_done"] = self.last_done
@@ -348,6 +360,7 @@ class Indexer:
             # Da qui il documento è già cercabile e leggibile, anche senza scheda.
             await asyncio.to_thread(self.store.index_text, path, lines)
             self.store.set_text(path, len(lines), sha, how, progress.ocr)
+            self.store.drop_pages(sha)
         else:
             progress.ocr = row["ocr"]
         if not progress.pages:
@@ -391,22 +404,26 @@ class Indexer:
         row = self.store.get_doc(path)
         method = (row["method"] if row else "") or self.cfg.ocr.mode
         pdf = file.suffix.lower() == ".pdf"
+        sha = row["sha"] if row else ""
         if pdf and method == "ocr":
-            return await self._extract_ocr(file, progress)
+            return await self._extract_ocr(file, progress, sha)
         try:
             return await asyncio.to_thread(extract_lines, file)
         except NoTextError:
             if not pdf or method != "auto":
                 raise
-            return await self._extract_ocr(file, progress)
+            return await self._extract_ocr(file, progress, sha)
 
-    async def _extract_ocr(self, file: Path, progress: Progress) -> list[str]:
+    async def _extract_ocr(self, file: Path, progress: Progress, sha: str) -> list[str]:
         if self.ocr is None:
             raise OcrError("Nessun OCR collegato: Impostazioni → Lettura dei documenti",
                            unavailable=True)
         progress.ocr, progress.engine = self.ocr.name, self.ocr
+        progress.cache = PageCache(self.store.pages_dir(sha, self.ocr.identity()))
+        progress.ocr_started = time.monotonic()
         lines = await asyncio.to_thread(extract_lines, file, self.ocr,
-                                        lambda done, total: self._on_page(progress, done, total))
+                                        lambda done, total: self._on_page(progress, done, total),
+                                        progress.cache)
         progress.ocr = self.ocr.name  # ora dice anche dove gira (scheda video o processore)
         return lines
 

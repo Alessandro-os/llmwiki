@@ -39,12 +39,35 @@ NO_TEXT = ("nessun testo estraibile: se è una scansione o sono appunti scritti 
            "l'OCR in Impostazioni → Lettura dei documenti")
 
 
-def extract_lines(path: Path, ocr=None, on_page=None) -> list[str]:
+class PageCache:
+    """Le pagine già lette dall'OCR, una per file. Se l'OCR si spegne a pagina 80 di 100 (o
+    l'app viene chiusa), alla ripresa si riparte da lì: a 30-50 secondi a pagina sul processore,
+    ricominciare da capo voleva dire rifare un'ora di lavoro."""
+
+    def __init__(self, folder: Path) -> None:
+        self.folder, self.hits = folder, 0  # hits: pagine ritrovate già lette (per la stima del tempo)
+
+    def get(self, number: int) -> str | None:
+        try:
+            text = (self.folder / f"{number:05d}.txt").read_text(encoding="utf-8")
+        except OSError:
+            return None
+        self.hits += 1
+        return text
+
+    def put(self, number: int, text: str) -> None:
+        self.folder.mkdir(parents=True, exist_ok=True)
+        tmp = self.folder / f"{number:05d}.tmp"
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(self.folder / f"{number:05d}.txt")
+
+
+def extract_lines(path: Path, ocr=None, on_page=None, pages: PageCache | None = None) -> list[str]:
     """Con `ocr` (un `ocr.Ocr`) le pagine dei PDF si leggono come immagini; `on_page(fatte,
-    totali)` segue l'avanzamento pagina per pagina."""
+    totali)` segue l'avanzamento pagina per pagina; `pages` ricorda le pagine già lette."""
     ext = path.suffix.lower()
     if ext == ".pdf" and ocr is not None:
-        raw = _pdf_ocr(path, ocr, on_page or (lambda done, total: None))
+        raw = _pdf_ocr(path, ocr, on_page or (lambda done, total: None), pages)
     elif ext == ".pdf":
         raw = _pdf(path)
     elif ext == ".docx":
@@ -88,7 +111,7 @@ def _pdf(path: Path) -> str:
     return "\n\n".join(parts)
 
 
-def _pdf_ocr(path: Path, ocr, on_page) -> str:
+def _pdf_ocr(path: Path, ocr, on_page, pages: PageCache | None = None) -> str:
     """Ogni pagina diventa un'immagine (pypdfium2: pypdf sa leggere il testo ma non disegnare le
     pagine) e l'OCR ne legge il testo. Una pagina alla volta: poca memoria anche con libri lunghi."""
     import pypdfium2
@@ -98,10 +121,15 @@ def _pdf_ocr(path: Path, ocr, on_page) -> str:
         total, parts = len(document), []
         on_page(0, total)  # il totale si sa subito: l'avanzamento può partire dalla prima pagina
         for number in range(total):
-            image = document[number].render(scale=ocr.dpi / 72).to_pil()
-            buffer = io.BytesIO()
-            image.save(buffer, format="PNG")
-            parts.append(f"=== Pagina {number + 1} ===\n{ocr.read(buffer.getvalue())}")
+            text = pages.get(number) if pages else None
+            if text is None:
+                image = document[number].render(scale=ocr.dpi / 72).to_pil()
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                text = ocr.read(buffer.getvalue())
+                if pages:
+                    pages.put(number, text)
+            parts.append(f"=== Pagina {number + 1} ===\n{text}")
             on_page(number + 1, total)
     finally:
         document.close()
