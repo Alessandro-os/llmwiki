@@ -46,7 +46,8 @@ Per chi sviluppa:
 - `backup.py` e le rotte `/api/admin/backup` e `/api/admin/restore`.
 - Banco di prova: le formule in LaTeX contano come il testo (`\frac{5}{2}` = "5/2").
 - I controlli su GitHub girano anche sui rami `claude/**`.
-- Pubblicazione automatica: un'etichetta `v…` costruisce, collauda e pubblica la versione
+- Pubblicazione automatica: un comando su GitHub (o un'etichetta `v…`) costruisce, collauda e
+  pubblica la versione
   (`.github/workflows/release.yml`, `packaging/release_notes.py`).
 
 ## 0.5.0 · 2026-11-16

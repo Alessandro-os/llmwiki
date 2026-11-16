@@ -1,8 +1,10 @@
 name: Pubblicazione
 
-# Un'etichetta "v0.5.1" caricata su GitHub costruisce l'app su Windows, la collauda e pubblica
-# la versione con installatore e zip. Se test o collaudo non passano, non si pubblica niente.
+# Costruisce l'app su Windows, la collauda e pubblica la versione scritta nel codice, con
+# installatore e zip. Parte a mano (Actions → Pubblicazione → Run workflow, su main) oppure
+# caricando l'etichetta "v0.5.1". Se test o collaudo non passano, non si pubblica niente.
 on:
+  workflow_dispatch:
   push:
     tags: ["v*"]
 
@@ -29,10 +31,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
+          $version = (uv run python -c "import llmwiki; print(llmwiki.__version__)").Trim()
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$version") { throw "l'etichetta ${{ github.ref_name }} non corrisponde alla versione $version del codice" }
           $files = "dist\LLMWiki-$version-setup.exe", "dist\LLMWiki-$version-windows-x64.zip"
           foreach ($file in $files) { if (-not (Test-Path $file)) { throw "manca $file" } }
           uv run python packaging\release_notes.py $version note.md @files
           if ($LASTEXITCODE) { throw "note della versione non scritte" }
-          gh release create "${{ github.ref_name }}" @files --title "LLMWiki $version" --notes-file note.md
+          gh release create "v$version" @files --target "${{ github.sha }}" --title "LLMWiki $version" --notes-file note.md
           if ($LASTEXITCODE) { throw "pubblicazione non riuscita" }
