@@ -138,16 +138,18 @@ class LocalOcr(Ocr):
         self._client: ServerOcr | None = None
         self._lock = threading.Lock()
         self._last_used = 0.0
+        self._reading = 0  # pezzi in lettura adesso: finché ce ne sono, l'OCR non si spegne
         self._closed = threading.Event()
         threading.Thread(target=self._idle_watch, name="llmwiki-ocr-idle", daemon=True).start()
 
     def read_piece(self, png: bytes) -> str:
-        client = self._ensure()
-        self._last_used = time.monotonic()  # a ogni pezzo: lo spegnimento per inattività aspetta
+        client = self._ensure()  # segna anche che un pezzo è in lettura
         try:
             return client.read_piece(png)
         finally:
-            self._last_used = time.monotonic()
+            with self._lock:
+                self._reading -= 1
+                self._last_used = time.monotonic()
 
     def close(self) -> None:
         self._closed.set()
@@ -156,23 +158,30 @@ class LocalOcr(Ocr):
 
     def _ensure(self) -> ServerOcr:
         with self._lock:
-            if self._process and self._process.poll() is None and self._client:
+            # Sotto lo stesso lucchetto dello spegnimento per inattività: altrimenti l'OCR appena
+            # acceso, o occupato su un pezzo lungo (processore lento), poteva essere spento.
+            client = self._running_or_started()
+            self._reading += 1
+            return client
+
+    def _running_or_started(self) -> ServerOcr:
+        if self._process and self._process.poll() is None and self._client:
+            return self._client
+        self._stop()
+        missing = [p for p in (self.server, self.model, self.mmproj) if not Path(p).is_file()]
+        if missing:
+            raise OcrError(f"{self.label}: non trovo {missing[0]}. Impostazioni → Lettura dei documenti "
+                           "→ Cerca gli OCR sul computer", unavailable=True)
+        free = free_gpu_mb()
+        tries = [("processore", ["-ngl", "0", "--no-mmproj-offload", "-t", str(max(2, (os.cpu_count() or 4) // 2))])]
+        if free is None or free >= GPU_FREE_MB:  # c'è posto (o non si sa): prima la scheda video
+            tries.insert(0, ("scheda video", ["-ngl", "99", "-fa", "on"]))
+        for where, extra in tries:
+            if self._start(extra):
+                self.name = f"{self.label} ({where})"
+                log.info("%s acceso (%s)", self.label, where)
                 return self._client
-            self._stop()
-            missing = [p for p in (self.server, self.model, self.mmproj) if not Path(p).is_file()]
-            if missing:
-                raise OcrError(f"{self.label}: non trovo {missing[0]}. Impostazioni → Lettura dei documenti "
-                               "→ Cerca gli OCR sul computer", unavailable=True)
-            free = free_gpu_mb()
-            tries = [("processore", ["-ngl", "0", "--no-mmproj-offload", "-t", str(max(2, (os.cpu_count() or 4) // 2))])]
-            if free is None or free >= GPU_FREE_MB:  # c'è posto (o non si sa): prima la scheda video
-                tries.insert(0, ("scheda video", ["-ngl", "99", "-fa", "on"]))
-            for where, extra in tries:
-                if self._start(extra):
-                    self.name = f"{self.label} ({where})"
-                    log.info("%s acceso sul %s", self.label, where)
-                    return self._client
-            raise OcrError(f"{self.label} non si è acceso: i dettagli sono in logs\\ocr.log", unavailable=True)
+        raise OcrError(f"{self.label} non si è acceso: i dettagli sono in logs\\ocr.log", unavailable=True)
 
     def _start(self, extra: list[str]) -> bool:
         import httpx
@@ -181,8 +190,8 @@ class LocalOcr(Ocr):
         args = [self.server, "-m", self.model, "--mmproj", self.mmproj, *extra, "-c", "8192",
                 "--jinja", "--reasoning", "off", "--temp", "0", "--host", "127.0.0.1", "--port", str(port),
                 "--alias", "ocr"]
-        log_file = (apphome.logs_dir() / "ocr.log").open("ab")
-        self._process = subprocess.Popen(args, stdout=log_file, stderr=log_file, creationflags=NO_WINDOW)
+        with (apphome.logs_dir() / "ocr.log").open("ab") as log_file:  # il processo ne tiene una copia
+            self._process = subprocess.Popen(args, stdout=log_file, stderr=log_file, creationflags=NO_WINDOW)
         deadline = time.monotonic() + START_SECONDS
         while time.monotonic() < deadline and self._process.poll() is None:
             try:
@@ -210,6 +219,10 @@ class LocalOcr(Ocr):
     def _idle_watch(self) -> None:
         while not self._closed.wait(15):
             with self._lock:
-                if self._process and time.monotonic() - self._last_used > IDLE_SECONDS:
+                if self._is_idle():
                     log.info("%s spento: nessuna pagina da leggere", self.label)
                     self._stop()
+
+    def _is_idle(self) -> bool:
+        return bool(self._process and not self._reading
+                    and time.monotonic() - self._last_used > IDLE_SECONDS)

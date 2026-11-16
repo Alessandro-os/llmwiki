@@ -120,8 +120,20 @@ In ordine di importanza, secondo me.
   avvisare che le schede richiedono molto.
 - [ ] **Registro più pulito.** Gli avvisi di pypdf ("wrong pointing object", "fontTools is
   required…") riempiono `llmwiki.log` a ogni lettura: abbassarli a livello di debug.
-- [ ] **Italiano:** "MiniCPM-OCR acceso sul scheda video" → "sulla scheda video"
-  (`ocr_local.py`).
+- [x] **Italiano:** "MiniCPM-OCR acceso sul scheda video" → ora "acceso (scheda video)".
+
+**Ricontrollo del 16/11 (fatto leggendo il codice, senza l'app accesa)**
+
+- [x] "Rileggi" premuto durante la lettura veniva ignorato: corretto, con test.
+- [x] Un file illeggibile fermava la scansione di tutti gli altri: corretto, con test.
+- [x] L'OCR locale poteva essere spento mentre leggeva: corretto, con test.
+- Sul modo "auto" al posto di "OCR": il caricamento salva il modo giusto (c'è il test), quindi
+  nel database "auto" può arrivare solo da un caricamento fatto con "Automatico" o da "Rileggi".
+  L'ipotesi più probabile resta il menu cambiato dopo il trascinamento. Resta da provare a mano.
+- [ ] Un documento cancellato proprio mentre viene letto può restare nella ricerca (le righe
+  scritte da un thread dopo la cancellazione). Raro; non corretto.
+- [ ] Il caricamento calcola l'impronta del file bloccando il server (qualche decimo di secondo
+  per 49 MB). Piccolo; non corretto.
 
 ## Sviluppi possibili
 

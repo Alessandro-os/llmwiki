@@ -258,11 +258,17 @@ class Indexer:
                 continue
             path = relative.as_posix()
             seen.add(path)
-            stat = file.stat()
             row = known.get(path)
-            if row and row["size"] == stat.st_size and row["mtime"] == stat.st_mtime:
+            try:
+                stat = file.stat()
+                if row and row["size"] == stat.st_size and row["mtime"] == stat.st_mtime:
+                    continue
+                sha = sha_file(file)
+            except OSError as exc:
+                # in uso da un altro programma, o sparito a metà: si riprova al prossimo giro,
+                # e intanto gli altri file si leggono lo stesso
+                log.warning("file %s non leggibile ora: %s", path, exc)
                 continue
-            sha = sha_file(file)
             if row and row["sha"] == sha:
                 self.store.touch_doc(path, stat.st_size, stat.st_mtime)
                 continue
@@ -329,7 +335,8 @@ class Indexer:
                 self.reading.pop(path, None)
 
     async def _read_doc(self, path: str, progress: Progress) -> None:
-        sha = self.store.get_doc(path)["sha"]
+        row = self.store.get_doc(path)
+        sha, method = row["sha"], row["method"]
         self.store.set_status(path, "indexing")
         lines = await self._extract(path, self.store.doc_file(path), progress)
         if not progress.pages:
@@ -340,9 +347,10 @@ class Indexer:
         await asyncio.to_thread(self.store.index_text, path, lines)
         body = await self._summarize(path, lines)
         row = self.store.get_doc(path)
-        if row is None or row["sha"] != sha:
-            # modificato o cancellato mentre il modello lo leggeva: questa scheda
-            # descrive un testo che non c'è più
+        if row is None or row["sha"] != sha or row["method"] != method:
+            # modificato o cancellato mentre il modello lo leggeva: questa scheda descrive un
+            # testo che non c'è più. Lo stesso se nel frattempo è stato chiesto un altro modo di
+            # lettura ("Rileggi con l'OCR"): il documento è già tornato in coda e si rilegge.
             if row is None:
                 self.store.delete_doc(path)
             self._rescan.set()

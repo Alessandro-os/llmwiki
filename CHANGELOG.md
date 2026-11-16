@@ -1,5 +1,23 @@
 # Cronologia delle versioni
 
+## Non ancora pubblicato (0.5.1)
+
+Per chi la usa:
+
+- "Rileggi" premuto mentre il documento è ancora in lettura ora viene rispettato: prima la
+  scheda usciva dal testo letto nel vecchio modo e il documento risultava già pronto.
+- Un file che non si può leggere in quel momento (aperto da un altro programma, copia in
+  corso) non blocca più la lettura degli altri documenti: si riprova al giro dopo.
+- L'OCR acceso dall'app non viene più spento mentre legge un pezzo lungo o appena dopo
+  l'accensione.
+
+Per chi sviluppa:
+
+- `Indexer._read_doc` confronta anche `method`, oltre all'impronta, prima di segnare "pronto".
+- `Indexer._scan_fs` salta il file che dà `OSError` invece di far fallire tutta la scansione.
+- `LocalOcr`: conto dei pezzi in lettura (`_reading`) sotto lo stesso lucchetto dello
+  spegnimento per inattività; `ocr.log` non resta più aperto nell'app a ogni accensione.
+
 ## 0.5.0 · 2026-11-16
 
 Per chi la usa:

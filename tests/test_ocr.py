@@ -206,6 +206,60 @@ def test_each_document_can_be_read_its_own_way(tmp_path):
     asyncio.run(scenario())
 
 
+def test_a_method_chosen_while_the_document_is_being_read_is_not_lost(tmp_path):
+    """"Rileggi con l'OCR" premuto mentre il modello scrive la scheda: prima la scheda usciva
+    dal testo letto nel vecchio modo e il documento risultava pronto con il modo nuovo."""
+    cfg = ocr_cfg(tmp_path, mode="text")
+    cfg.docs_dir.mkdir(parents=True)
+    (cfg.docs_dir / "nota.txt").write_text("La pompa P-101 ha una portata di 40 metri cubi l'ora.", encoding="utf-8")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        summarize = wiki.indexer._summarize
+
+        async def slow(path, lines):
+            wiki.store.set_method(path, "auto")  # arriva a metà lettura
+            return await summarize(path, lines)
+
+        wiki.indexer._summarize = slow
+        await wiki.indexer.scan()
+        await asyncio.gather(*list(wiki.indexer._tasks.values()))
+        assert wiki.store.get_doc("nota.txt")["status"] == "pending"  # si rilegge, non "pronto"
+        wiki.indexer._summarize = summarize
+        status = await wiki.indexer.run_once()
+        assert status["ready"] == 1 and wiki.store.get_doc("nota.txt")["method"] == "auto"
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_a_file_that_cannot_be_read_does_not_stop_the_others(tmp_path, monkeypatch):
+    """Un file tenuto aperto da un altro programma: gli altri si leggono lo stesso."""
+    from llmwiki import indexer as indexer_module
+
+    cfg = ocr_cfg(tmp_path, mode="text")
+    cfg.docs_dir.mkdir(parents=True)
+    (cfg.docs_dir / "bloccato.txt").write_text("In uso da un altro programma.", encoding="utf-8")
+    (cfg.docs_dir / "libero.txt").write_text("Il contratto scade il 31 dicembre.", encoding="utf-8")
+    real = indexer_module.sha_file
+
+    def locked(path):
+        if path.name == "bloccato.txt":
+            raise PermissionError(13, "file in uso")
+        return real(path)
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        monkeypatch.setattr(indexer_module, "sha_file", locked)
+        status = await wiki.indexer.run_once()
+        assert status["ready"] == 1 and wiki.store.get_doc("libero.txt")["status"] == "ready"
+        monkeypatch.setattr(indexer_module, "sha_file", real)  # il programma lo chiude
+        assert (await wiki.indexer.run_once())["ready"] == 2
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_reading_method_from_upload_and_from_the_document_card(tmp_path):
     cfg = ocr_cfg(tmp_path, mode="text")
     cfg.save()
@@ -307,6 +361,39 @@ def test_local_ocr_starts_on_the_gpu_if_there_is_room_else_on_the_cpu(tmp_path, 
     with pytest.raises(OcrError, match="Cerca gli OCR") as missing:
         engine.read(ocr.sample_image())
     assert missing.value.unavailable
+    engine.close()
+
+
+def test_local_ocr_is_not_switched_off_while_it_reads(tmp_path, monkeypatch):
+    """Lo spegnimento per inattività non tocca un OCR appena acceso o fermo su un pezzo lungo."""
+    from llmwiki import ocr_local
+
+    files = [tmp_path / name for name in ("llama-server.exe", "MiniCPM-OCR-1_0-Q8_0.gguf", "mmproj.gguf")]
+    for path in files:
+        gguf(path)
+    seen = []
+
+    class SlowClient:
+        def read_piece(self, png):
+            seen.append(engine._is_idle())  # a metà pezzo, con l'ultimo uso lontanissimo
+            return "testo"
+
+        def close(self):
+            pass
+
+    def fake_start(self, extra):
+        self._process, self._client = type("P", (), {"poll": lambda s: None, "terminate": lambda s: None,
+                                                      "wait": lambda s, timeout=0: 0})(), SlowClient()
+        return True
+
+    monkeypatch.setattr(ocr_local.LocalOcr, "_start", fake_start)
+    monkeypatch.setattr(ocr_local, "free_gpu_mb", lambda: 8000)
+    monkeypatch.setattr(ocr_local.time, "monotonic", lambda: 1e6)
+    engine = ocr_local.LocalOcr(*map(str, files), prompt="")
+    assert engine.read_piece(b"png") == "testo" and seen == [False]
+    assert not engine._is_idle()  # appena usato
+    engine._last_used -= ocr_local.IDLE_SECONDS + 1
+    assert engine._is_idle()  # fermo da più di tre minuti: ora sì
     engine.close()
 
 
