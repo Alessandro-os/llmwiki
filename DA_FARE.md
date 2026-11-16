@@ -69,6 +69,60 @@ In ordine di importanza, secondo me.
   - **Test:** un modello in una cartella "AI" finta sotto un disco finto.
   - **Nel frattempo:** Opzioni avanzate → "Altre cartelle dove cercare" → `C:\AI-Workspace\modelli`.
 
+**Prova vera del 16/11 con la 0.5.0 installata**
+
+- Che cosa è successo:
+  - Strata era spento; il documento era `Macchine - Teoria-ALE-laptop.pdf` (49 MB) nello spazio UNIVERSITA`.
+  - Il documento è registrato con il modo "auto" anche se il menu mostrava "OCR".
+  - Il testo l'ha letto pypdf: l'OCR non è mai partito.
+  - Poi la scheda è rimasta ferma su "Il modello non risponde", perché Strata era spento.
+
+- [ ] **Il modo scelto al caricamento non è arrivato.** Il database dice `method = auto`, la
+  schermata mostrava "OCR".
+  - Da provare dall'interfaccia vera:
+    - scegliere "OCR";
+    - trascinare un file;
+    - guardare il campo `method`.
+  - Forse il menu è stato cambiato dopo il trascinamento: in quel caso conta il valore al
+    momento del caricamento, e va detto meglio nell'interfaccia (per esempio: "letto con:
+    Automatico" nel messaggio dopo il caricamento).
+- [ ] **Mai un modello generico come OCR.** Strata, o un altro modello che vede le immagini, inventa il testo:
+  - misurato sulle pagine vere (vedi Misure nel README);
+  - la ricerca degli OCR lo mostra come "sconsigliato: può inventare il testo";
+  - non è sceglibile con un clic, né usato da Automatico.
+- [ ] **Chiedere prima di fermare il modello, per dare la scheda video all'OCR.**
+  - Se l'OCR deve leggere e la scheda video è occupata dal modello che risponde, l'app chiede.
+    Esempio: "Spengo Strata e leggo 12 pagine sulla scheda video (circa 1 min), oppure leggo
+    sul processore (circa 8 min)?".
+  - Se la risposta è sì:
+    - prima tutte le pagine con l'OCR;
+    - poi si riaccende il modello;
+    - infine si scrivono le schede.
+  - Spegnere e riaccendere il modello si fa con due comandi in Opzioni avanzate, validi per
+    qualunque modello. Per Strata l'app propone da sola `Spegni cervello.cmd` e
+    `Accendi cervello.cmd` se li trova.
+- [ ] **Distinguere "testo letto" da "scheda scritta"** nella riga di stato e nei messaggi.
+  - Oggi dice "Modello: qwen3.8…" anche mentre legge il testo: sembra che legga Strata.
+  - Durante la lettura: "Testo: MiniCPM-OCR (scheda video) · pagina 3 di 12".
+  - Dopo, mentre si scrive la scheda: "Scheda: Strata".
+  - Se il modello è spento dopo la lettura del testo: "Testo letto e già cercabile; per la
+    scheda serve il modello, che è spento: accendilo". Oggi dice solo "Il modello non risponde".
+- [ ] **Non rileggere il PDF a ogni tentativo.**
+  - Quando il modello non risponde, il documento torna in coda e al tentativo dopo il testo
+    si estrae da capo: nel registro pypdf alle 19:51 e di nuovo alle 19:53.
+  - Con l'OCR vorrebbe dire rifare minuti di lavoro a ogni tentativo.
+  - Il testo è già salvato in `.indice\text`: riusarlo se l'impronta del file non è cambiata.
+- [ ] **Riconoscere il testo nascosto delle scansioni.**
+  - Un PDF in cui ogni pagina è un'unica immagine, con sopra il testo invisibile messo dallo
+    scanner: in Automatico va letto con l'OCR, non con quel testo, che è spesso pessimo.
+- [ ] **Stima del tempo prima di partire,** dalle pagine e dai secondi misurati: 2-3 s a pagina
+  sulla scheda video, 30-50 s sul processore. Per un PDF grande (49 MB, 433 KB di testo)
+  avvisare che le schede richiedono molto.
+- [ ] **Registro più pulito.** Gli avvisi di pypdf ("wrong pointing object", "fontTools is
+  required…") riempiono `llmwiki.log` a ogni lettura: abbassarli a livello di debug.
+- [ ] **Italiano:** "MiniCPM-OCR acceso sul scheda video" → "sulla scheda video"
+  (`ocr_local.py`).
+
 ## Sviluppi possibili
 
 - [ ] Ricerca per significato oltre che per parole (embedding): richiede di scaricare un
