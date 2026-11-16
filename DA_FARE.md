@@ -55,7 +55,9 @@ In ordine di importanza, secondo me.
 
 ## Per la prossima versione (0.5.1)
 
-- [ ] **La ricerca degli OCR non trova i modelli tenuti in una cartella propria.** Con la 0.5.0
+- [x] **La ricerca degli OCR non trova i modelli tenuti in una cartella propria.** *Fatto il
+  16/11: cartelle in cima ai dischi con nomi da modelli, Download e Desktop; se non trova niente
+  dice dove ha guardato. Il tempo della ricerca sul PC vero resta da misurare.* Con la 0.5.0
   installata, MiniCPM-OCR in `C:\AI-Workspace\modelli\llama.cpp\modelli\MiniCPM-OCR-1.0` non
   compare: da sola la ricerca guarda solo la cartella `ocr` dell'app, LM Studio, Hugging Face
   e `%LOCALAPPDATA%\llama.cpp` (`ocr_local.default_folders`). Nella prova del 16/11 lo trovava
@@ -77,7 +79,8 @@ In ordine di importanza, secondo me.
   - Il testo l'ha letto pypdf: l'OCR non è mai partito.
   - Poi la scheda è rimasta ferma su "Il modello non risponde", perché Strata era spento.
 
-- [ ] **Il modo scelto al caricamento non è arrivato.** Il database dice `method = auto`, la
+- [ ] **Il modo scelto al caricamento non è arrivato.** *Ora dopo il caricamento l'app scrive
+  "PDF letti con: …"; la prova a mano resta da fare.* Il database dice `method = auto`, la
   schermata mostrava "OCR".
   - Da provare dall'interfaccia vera:
     - scegliere "OCR";
@@ -101,13 +104,13 @@ In ordine di importanza, secondo me.
   - Spegnere e riaccendere il modello si fa con due comandi in Opzioni avanzate, validi per
     qualunque modello. Per Strata l'app propone da sola `Spegni cervello.cmd` e
     `Accendi cervello.cmd` se li trova.
-- [ ] **Distinguere "testo letto" da "scheda scritta"** nella riga di stato e nei messaggi.
+- [x] **Distinguere "testo letto" da "scheda scritta"** *(fatto il 16/11, visto solo con il modello dimostrativo)* nella riga di stato e nei messaggi.
   - Oggi dice "Modello: qwen3.8…" anche mentre legge il testo: sembra che legga Strata.
   - Durante la lettura: "Testo: MiniCPM-OCR (scheda video) · pagina 3 di 12".
   - Dopo, mentre si scrive la scheda: "Scheda: Strata".
   - Se il modello è spento dopo la lettura del testo: "Testo letto e già cercabile; per la
     scheda serve il modello, che è spento: accendilo". Oggi dice solo "Il modello non risponde".
-- [ ] **Non rileggere il PDF a ogni tentativo.**
+- [x] **Non rileggere il PDF a ogni tentativo.** *(fatto il 16/11, con test)*
   - Quando il modello non risponde, il documento torna in coda e al tentativo dopo il testo
     si estrae da capo: nel registro pypdf alle 19:51 e di nuovo alle 19:53.
   - Con l'OCR vorrebbe dire rifare minuti di lavoro a ogni tentativo.
@@ -118,7 +121,7 @@ In ordine di importanza, secondo me.
 - [ ] **Stima del tempo prima di partire,** dalle pagine e dai secondi misurati: 2-3 s a pagina
   sulla scheda video, 30-50 s sul processore. Per un PDF grande (49 MB, 433 KB di testo)
   avvisare che le schede richiedono molto.
-- [ ] **Registro più pulito.** Gli avvisi di pypdf ("wrong pointing object", "fontTools is
+- [x] **Registro più pulito.** *(fatto il 16/11)* Gli avvisi di pypdf ("wrong pointing object", "fontTools is
   required…") riempiono `llmwiki.log` a ogni lettura: abbassarli a livello di debug.
 - [x] **Italiano:** "MiniCPM-OCR acceso sul scheda video" → ora "acceso (scheda video)".
 
@@ -132,8 +135,27 @@ In ordine di importanza, secondo me.
   L'ipotesi più probabile resta il menu cambiato dopo il trascinamento. Resta da provare a mano.
 - [ ] Un documento cancellato proprio mentre viene letto può restare nella ricerca (le righe
   scritte da un thread dopo la cancellazione). Raro; non corretto.
-- [ ] Il caricamento calcola l'impronta del file bloccando il server (qualche decimo di secondo
-  per 49 MB). Piccolo; non corretto.
+- [x] Il caricamento calcola l'impronta del file bloccando il server (qualche decimo di secondo
+  per 49 MB). Corretto.
+- [x] Uno scaricamento finito ma interrotto prima del controllo (aggiornamento, decision model)
+  non ripartiva più: corretto, con test.
+- [x] Un file riscritto dall'indicizzazione proprio durante una domanda faceva fallire la
+  domanda: ora l'agente riceve un errore e prosegue.
+- [x] Uno spazio nuovo non ereditava l'OCR scelto nello spazio attuale: corretto, con test.
+
+**Proposte nuove (in ordine di utilità, secondo me)**
+
+- [ ] **Riprendere l'OCR dalla pagina a cui era arrivato.** Oggi se l'OCR si spegne a pagina 80
+  di 100 si riparte da 1. Basta salvare le pagine lette man mano.
+- [ ] **Schede solo quando servono.** Il testo è cercabile subito; la scheda di un PDF da 49 MB
+  costa molto. Si potrebbe rispondere già con la sola ricerca e scrivere le schede di notte o
+  a richiesta ("Leggi a fondo").
+- [ ] **Un tasto "Copia la diagnosi"** in Impostazioni: versione, modello, OCR, ultime righe del
+  registro, senza contenuti dei documenti. Serve a chi lo prova e deve dirci che cosa non va.
+- [ ] **Controllo automatico su GitHub a ogni push** (ruff e pytest): gratis per i repository
+  pubblici, evita di pubblicare una versione con i test rossi.
+- [ ] **Copia di sicurezza di uno spazio** in un file zip, e ripristino: lo chiederà la prima
+  azienda, e protegge anche te.
 
 ## Sviluppi possibili
 

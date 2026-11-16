@@ -10,6 +10,18 @@ Per chi la usa:
   corso) non blocca più la lettura degli altri documenti: si riprova al giro dopo.
 - L'OCR acceso dall'app non viene più spento mentre legge un pezzo lungo o appena dopo
   l'accensione.
+- Se il modello è spento, il testo già letto non si rilegge a ogni tentativo: resta salvato e
+  cercabile, e quando il modello torna si scrive solo la scheda. Con l'OCR erano minuti di
+  lavoro rifatti ogni minuto.
+- In basso a sinistra si capisce chi sta facendo che cosa: "Leggo il testo" (dal file o con
+  l'OCR, con la pagina) e poi "Scrivo la scheda" (con il modello). Se il modello è spento dice
+  che il testo è già cercabile e che per le schede va acceso.
+- La ricerca degli OCR guarda anche nelle cartelle in cima ai dischi con nomi come AI, models,
+  llama, in Download e sul Desktop. Se non trova niente dice dove ha guardato.
+- Dopo il caricamento l'app scrive con che cosa leggerà i PDF.
+- Uno spazio nuovo parte anche con l'OCR dello spazio attuale.
+- Un aggiornamento scaricato per intero ma interrotto prima del controllo non resta più bloccato.
+- Il registro non si riempie più degli avvisi di pypdf.
 
 Per chi sviluppa:
 
@@ -17,6 +29,11 @@ Per chi sviluppa:
 - `Indexer._scan_fs` salta il file che dà `OSError` invece di far fallire tutta la scansione.
 - `LocalOcr`: conto dei pezzi in lettura (`_reading`) sotto lo stesso lucchetto dello
   spegnimento per inattività; `ocr.log` non resta più aperto nell'app a ogni accensione.
+- `state.db`: colonne `text_sha` e `text_method`; `Store.set_text` al posto di `set_lines`.
+- `/api/status`: `text_waiting`, `ocr_mode`, e per ogni documento in lettura `phase`, `page`,
+  `pages`. `/api/admin/ocr/detect` restituisce anche `searched`.
+- `ocr_local.search_folders` è l'unico posto che dice dove si cercano gli OCR.
+- `download.fetch_verified` non chiede niente al server se il file `.part` è già completo.
 
 ## 0.5.0 · 2026-11-16
 

@@ -68,6 +68,10 @@ DOC_COLUMNS = {
     "read_at": "REAL NOT NULL DEFAULT 0",  # quando è stata finita
     "ocr": "TEXT NOT NULL DEFAULT ''",     # OCR che ha letto le pagine, se è passato dall'OCR
     "method": "TEXT NOT NULL DEFAULT ''",  # modo di lettura scelto per il documento ('' = dello spazio)
+    # Il testo salvato in `text/` vale per questa impronta del file e questo modo di lettura:
+    # finché non cambiano, un nuovo tentativo (modello spento) non rilegge il file né rifà l'OCR.
+    "text_sha": "TEXT NOT NULL DEFAULT ''",
+    "text_method": "TEXT NOT NULL DEFAULT ''",
 }
 METHODS = ("", "auto", "text", "ocr")
 
@@ -230,9 +234,17 @@ class Store:
                 (status, error[:500], 1 if bump else 0, time.time(), path),
             )
 
-    def set_lines(self, path: str, count: int) -> None:
+    def set_text(self, path: str, count: int, sha: str, method: str, ocr: str) -> None:
+        """Il testo è stato letto e salvato: quante righe, da quale file, in che modo, con quale OCR."""
         with self.lock:
-            self.db.execute("UPDATE docs SET lines=? WHERE path=?", (count, path))
+            self.db.execute("UPDATE docs SET lines=?, text_sha=?, text_method=?, ocr=? WHERE path=?",
+                            (count, sha, method, ocr, path))
+
+    def text_waiting(self) -> int:
+        """Documenti con il testo già letto (e cercabile) ma ancora senza scheda."""
+        with self.lock:
+            return self.db.execute(
+                "SELECT COUNT(*) FROM docs WHERE status!='ready' AND text_sha!='' AND text_sha=sha").fetchone()[0]
 
     def set_ready(self, path: str, title: str, summary_sha: str, model: str = "",
                   seconds: float = 0.0, ocr: str = "") -> None:
@@ -249,7 +261,8 @@ class Store:
         if method not in METHODS:
             raise ValueError(f"modo di lettura non valido: {method!r}")
         with self.lock:
-            self.db.execute("UPDATE docs SET method=?, status='pending', error='', attempts=0, updated=?"
+            # text_sha vuoto: "Rileggi" chiede di rileggere davvero, anche con lo stesso modo
+            self.db.execute("UPDATE docs SET method=?, text_sha='', status='pending', error='', attempts=0, updated=?"
                             " WHERE path=?", (method, time.time(), path))
 
     def move_doc(self, old: str, new: str, size: int, mtime: float) -> None:

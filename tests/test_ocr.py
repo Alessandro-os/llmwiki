@@ -260,6 +260,46 @@ def test_a_file_that_cannot_be_read_does_not_stop_the_others(tmp_path, monkeypat
     asyncio.run(scenario())
 
 
+def test_the_text_is_not_read_again_when_the_model_was_off(tmp_path, monkeypatch):
+    """Prova vera del 16/11: modello spento, e a ogni tentativo il PDF si rileggeva da capo.
+    Con l'OCR sarebbero minuti di lavoro rifatti ogni minuto."""
+    from llmwiki.llm import LLMError
+
+    cfg = ocr_cfg(tmp_path)
+    cfg.docs_dir.mkdir(parents=True)
+    scanned_pdf(cfg.docs_dir / "appunti.pdf")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.indexer.ocr = engine = FakeOcr()
+        summarize = wiki.indexer._summarize
+
+        async def model_off(path, lines):
+            raise LLMError("il modello non risponde", status=0)
+
+        wiki.indexer._summarize = model_off
+        status = await wiki.indexer.run_once()
+        row = wiki.store.get_doc("appunti.pdf")
+        assert row["status"] == "pending" and engine.pages == 2 and status["text_waiting"] == 1
+        assert wiki.tools.search("termodinamica")["results"]  # già cercabile senza scheda
+
+        wiki.indexer._summarize, wiki.indexer._resume_at = summarize, 0.0
+        status = await wiki.indexer.run_once()
+        row = wiki.store.get_doc("appunti.pdf")
+        assert status["ready"] == 1 and engine.pages == 2  # l'OCR non ha riletto niente
+        assert row["ocr"] == "OCR di prova" and status["text_waiting"] == 0
+
+        wiki.store.set_method("appunti.pdf", "ocr")  # "Rileggi": qui sì che si rilegge
+        await wiki.indexer.run_once()
+        assert engine.pages == 4
+        (cfg.docs_dir / "appunti.pdf").write_bytes((cfg.docs_dir / "appunti.pdf").read_bytes() + b"\n%modificato\n")
+        await wiki.indexer.run_once()  # file cambiato: il testo salvato non vale più
+        assert engine.pages == 6 and wiki.store.get_doc("appunti.pdf")["status"] == "ready"
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
 def test_reading_method_from_upload_and_from_the_document_card(tmp_path):
     cfg = ocr_cfg(tmp_path, mode="text")
     cfg.save()
@@ -329,6 +369,36 @@ def test_local_ocrs_are_found_and_recognised(tmp_path, monkeypatch):
     gguf(server)
     found = app_module.find_local_ocr(f"  ;{tmp_path};")  # cartelle scritte a mano, con spazi
     assert all(f["ok"] and f["llama_server"] == str(server) for f in found)
+
+
+def test_models_kept_in_a_folder_of_their_own_are_found(tmp_path, monkeypatch):
+    """0.5.0: MiniCPM-OCR in C:\\AI-Workspace\\modelli non compariva, la ricerca guardava solo
+    le cartelle dei programmi. Ora guarda anche le cartelle in cima ai dischi con nomi da modelli."""
+    from llmwiki import ocr_local
+
+    disk, home = tmp_path / "C", tmp_path / "casa"
+    minicpm = disk / "AI-Workspace" / "modelli" / "llama.cpp" / "modelli" / "MiniCPM-OCR-1.0"
+    gguf(minicpm / "MiniCPM-OCR-1_0-Q8_0.gguf")
+    gguf(minicpm / "mmproj-model-f16-4x.gguf")
+    gguf(disk / "Programmi" / "altro" / "qwen-vl.gguf")  # nome qualunque: non si apre
+    gguf(disk / "Programmi" / "altro" / "mmproj-qwen-vl.gguf")
+    gguf(disk / "AI-Workspace" / "node_modules" / "x" / "mmproj-finto.gguf")  # cartelle pesanti saltate
+    gguf(disk / "AI-Workspace" / "node_modules" / "x" / "finto.gguf")
+    gguf(home / "Downloads" / "a" / "b" / "c" / "profondo.gguf")  # in Download solo in cima
+    gguf(home / "Downloads" / "a" / "b" / "c" / "mmproj-profondo.gguf")
+    assert [p.name for p in ocr_local.model_folders([disk, tmp_path / "disco staccato"])] == ["AI-Workspace"]
+    for name in ("models", "Modelli AI", "llama.cpp", "LLM", "my-gguf"):
+        assert ocr_local.MODEL_FOLDER.search(name), name
+    for name in ("Windows", "Maildir", "Programmi", "Emails", "Tallmadge"):
+        assert not ocr_local.MODEL_FOLDER.search(name), name
+
+    monkeypatch.setattr(ocr_local, "disk_roots", lambda: [disk])
+    monkeypatch.setattr(ocr_local.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(ocr_local.shutil, "which", lambda name: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "vuota"))
+    assert [f["name"] for f in app_module.find_local_ocr("")] == ["MiniCPM-OCR"]
+    assert disk / "AI-Workspace" in ocr_local.search_folders(f"{disk / 'AI-Workspace'}; D:/altro")
+    assert len(ocr_local.search_folders(str(disk / "AI-Workspace"))) == len(ocr_local.search_folders(""))
 
 
 def test_local_ocr_starts_on_the_gpu_if_there_is_room_else_on_the_cpu(tmp_path, monkeypatch):

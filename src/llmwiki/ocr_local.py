@@ -20,7 +20,9 @@ import os
 import re
 import shutil
 import socket
+import string
 import subprocess
+import sys
 import threading
 import time
 from functools import cache
@@ -34,6 +36,10 @@ GPU_FREE_MB = 3000   # sotto questa memoria libera nella scheda video si usa il 
 IDLE_SECONDS = 180   # spento dopo tre minuti senza pagine da leggere: la memoria torna libera
 START_SECONDS = 120
 MAX_DEPTH = 6        # quanto scendere nelle cartelle cercando i file
+SHALLOW_DEPTH = 2    # in Download e Desktop: cartelle grandi, i modelli stanno in cima
+# Cartelle in cima ai dischi che dal nome contengono modelli: "AI-Workspace", "models", "llama.cpp"…
+MODEL_FOLDER = re.compile(r"(?:^|[-_ .])(ai|llms?|gguf|llama|ollama|lmstudio|models?|modelli)(?:[-_ .]|$)", re.I)
+HEAVY = {"node_modules", "__pycache__", "site-packages", "venv"}  # migliaia di file, mai modelli
 
 
 @cache
@@ -52,22 +58,53 @@ def known(model_file: str) -> dict:
 
 # ---------------------------------------------------------------- ricerca sul computer
 
+def disk_roots() -> list[Path]:
+    """Le cime dei dischi su Windows; altrove la cartella personale."""
+    if sys.platform != "win32":
+        return [Path.home()]
+    return [root for root in (Path(f"{letter}:\\") for letter in string.ascii_uppercase) if root.is_dir()]
+
+
+def model_folders(roots: list[Path]) -> list[Path]:
+    """Chi tiene i modelli in una cartella propria (`C:\\AI-Workspace\\modelli`) la chiama quasi
+    sempre con un nome così: si guarda solo il nome delle cartelle in cima, senza aprirle tutte."""
+    found = []
+    for root in roots:
+        try:
+            found += sorted(p for p in root.iterdir() if MODEL_FOLDER.search(p.name) and p.is_dir())
+        except OSError:  # disco senza permesso o staccato
+            continue
+    return found
+
+
+def shallow_folders() -> list[Path]:
+    return [Path.home() / "Downloads", Path.home() / "Desktop"]
+
+
 def default_folders() -> list[Path]:
     home = Path.home()
     local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
     return [apphome.home() / "ocr", home / ".lmstudio" / "models", home / ".cache" / "lm-studio" / "models",
-            home / ".cache" / "huggingface" / "hub", local / "llama.cpp"]
+            home / ".cache" / "huggingface" / "hub", local / "llama.cpp",
+            *model_folders(disk_roots()), *shallow_folders()]
+
+
+def search_folders(extra: str = "") -> list[Path]:
+    """Dove si cerca: le cartelle consuete più quelle scritte in Impostazioni (separate da ";")."""
+    folders = default_folders() + [Path(f.strip()) for f in extra.split(";") if f.strip()]
+    return list(dict.fromkeys(folders))
 
 
 def _walk(root: Path, pattern: str):
     """I file che corrispondono a `pattern`, senza scendere oltre MAX_DEPTH livelli."""
     if not root.is_dir():
         return
-    base = len(root.parts)
+    base, depth = len(root.parts), SHALLOW_DEPTH if root in shallow_folders() else MAX_DEPTH
     for folder, subfolders, files in os.walk(root, followlinks=True):
-        if len(Path(folder).parts) - base >= MAX_DEPTH:
+        if len(Path(folder).parts) - base >= depth:
             subfolders[:] = []
-        subfolders[:] = [s for s in subfolders if not s.startswith(".") or s in (".cache", ".lmstudio")]
+        subfolders[:] = [s for s in subfolders if s.lower() not in HEAVY
+                         and (not s.startswith(".") or s in (".cache", ".lmstudio"))]
         for name in files:
             if re.fullmatch(pattern, name, re.I):
                 yield Path(folder) / name

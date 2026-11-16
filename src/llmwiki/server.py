@@ -33,6 +33,7 @@ from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
 from .ocr import make_ocr
 from .ocr_local import catalog as ocr_catalog
+from .ocr_local import search_folders
 from .ocr import probe as probe_ocr
 from .store import METHODS, norm_path, sha_file
 from .tools import ToolError
@@ -191,7 +192,7 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
         info.update(
             version=__version__, provider=wiki.cfg.llm.provider, model=wiki.cfg.llm.agent_model,
             judge=wiki.agent.verifier.judge_name, local=request.state.local,
-            auth=bool(wiki.cfg.server.users),
+            auth=bool(wiki.cfg.server.users), ocr_mode=wiki.cfg.ocr.mode,
         )
         if hub.registry is not None:
             active = hub.registry.active()
@@ -247,7 +248,8 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
             os.replace(tmp, target)
             if method:  # il documento entra subito in coda con il suo modo di lettura
                 stat = target.stat()
-                wiki.store.upsert_pending(relative, sha_file(target), stat.st_size, stat.st_mtime)
+                sha = await asyncio.to_thread(sha_file, target)  # file grandi: il server resta libero
+                wiki.store.upsert_pending(relative, sha, stat.st_size, stat.st_mtime)
                 wiki.store.set_method(relative, method)
             saved.append(relative)
         if saved:
@@ -481,7 +483,9 @@ def _ocr_routes(app: FastAPI, hub: Hub) -> None:
     @app.get("/api/admin/ocr/detect")
     async def ocr_detect(folders: str | None = None) -> dict:
         """`folders`: le cartelle scritte nella pagina, anche se non ancora salvate."""
-        return {"found": await detect_ocr(hub.wiki.cfg.ocr.folders if folders is None else folders)}
+        extra = hub.wiki.cfg.ocr.folders if folders is None else folders
+        searched = [str(folder) for folder in search_folders(extra) if folder.is_dir()]
+        return {"found": await detect_ocr(extra), "searched": searched}
 
     @app.post("/api/admin/ocr/test")
     async def ocr_test() -> dict:

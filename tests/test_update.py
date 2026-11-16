@@ -90,3 +90,20 @@ def test_update_is_for_the_desktop_app_only(tmp_path):
         assert "update" not in client.get("/api/status").json()
         assert client.post("/api/admin/update").status_code == 400
     assert update.LATEST.endswith("/releases/latest")
+
+
+def test_a_download_already_complete_is_checked_without_asking_again(tmp_path):
+    """Scaricato tutto ma interrotto prima del controllo: chiedere "dal byte N in poi" a file
+    finito dà 416 a ogni tentativo, e l'aggiornamento non partiva più."""
+    from llmwiki.download import fetch_verified
+
+    data = b"installatore" * 100
+    target = tmp_path / "file.exe"
+    (tmp_path / "file.exe.part").write_bytes(data)
+
+    def handler(request):
+        return httpx.Response(416)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http:
+        fetch_verified(http, "https://example.test/file.exe", target, len(data), hashlib.sha256(data).hexdigest())
+    assert target.read_bytes() == data and not (tmp_path / "file.exe.part").exists()

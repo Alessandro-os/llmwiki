@@ -221,11 +221,16 @@ function duration(seconds) {
 }
 // La percentuale è indicativa: passi fatti sui passi previsti finora (vedi Progress in indexer.py).
 function readingHtml(reading, queue) {
-  let html = reading.map((r) => '<span>Leggo «' + esc(short(baseName(r.path), 40)) + "» · " + r.percent + "% · " + duration(r.seconds) +
+  // Due lavori diversi: prima si legge il testo (dal file o con l'OCR), poi il modello scrive la scheda.
+  let html = reading.map((r) => "<span>" + (r.phase === "card" ? "Scrivo la scheda di «" : "Leggo il testo di «") + esc(short(baseName(r.path), 40)) + "» · " + r.percent + "% · " + duration(r.seconds) +
     '</span><div class="bar"><div style="width:' + r.percent + '%"></div></div>').join("");
   const others = queue - reading.length;
-  const ocr = reading.find((r) => r.ocr);
-  html += '<span class="muted">Modello: ' + esc(S.reader) + (ocr ? " · OCR: " + esc(ocr.ocr) : "") + (others > 0 ? " · in coda altri " + others : "") + "</span>";
+  const text = reading.find((r) => r.phase !== "card"), card = reading.some((r) => r.phase === "card");
+  const parts = [];
+  if (text) parts.push("Testo: " + (text.ocr ? esc(text.ocr) + (text.pages ? " · pagina " + text.page + " di " + text.pages : "") : "dal file"));
+  if (card) parts.push("Scheda: " + esc(S.reader));
+  if (others > 0) parts.push("in coda altri " + others);
+  html += '<span class="muted">' + parts.join(" · ") + "</span>";
   return html + (S.local ? '<button data-read="pause">Ferma la lettura</button>' : "");
 }
 // Aggiornamento dell'app: il tasto compare solo se GitHub ha una versione più nuova.
@@ -264,7 +269,7 @@ async function refreshStatus() {
   const queue = S.pending + S.indexing, reading = S.reading || [];
   let html = "<b>" + S.ready + (S.ready === 1 ? " documento pronto" : " documenti pronti") + "</b>";
   if (S.paused) html += "<span>Lettura ferma. Riprende da sola al prossimo avvio dell'app.</span>" + (S.local ? '<button data-read="resume">Riprendi</button>' : "");
-  else if (S.waiting) html += '<span class="warn">' + (S.waiting_ocr ? esc(S.waiting) + ". Riprovo da solo tra poco." : "Il modello non risponde: riprovo da solo tra poco.") + "</span>";
+  else if (S.waiting) html += '<span class="warn">' + (S.waiting_ocr ? esc(S.waiting) + ". Riprovo da solo tra poco." : (S.text_waiting ? "Testo letto e già cercabile (" + S.text_waiting + (S.text_waiting === 1 ? " documento" : " documenti") + "). Per le schede serve il modello, che non risponde: accendilo. Riprovo da solo tra poco." : "Il modello non risponde: accendilo. Riprovo da solo tra poco.")) + "</span>";
   else if (reading.length) html += readingHtml(reading, queue);
   else if (queue) html += "<span>Sto leggendo altri " + queue + "…</span><div class=\"bar\"><div style=\"width:" + Math.round(100 * S.ready / Math.max(S.total, 1)) + '%"></div></div>';
   else if (S.busy) html += "<span>Aggiorno i riassunti delle cartelle…</span>";
@@ -516,10 +521,12 @@ async function uploadFiles(files) {
   const body = new FormData(); for (const file of files) body.append("files", file);
   body.append("folder", $("folder").value.trim());
   body.append("method", $("readAs").value);
+  // il modo che conta è quello del momento del caricamento: lo si dice, così non restano dubbi
+  const readAs = READING[$("readAs").value] || "il modo dello spazio (" + (READING[S && S.ocr_mode] || "Automatico") + ")";
   $("uploadMsg").textContent = "Carico " + files.length + " file…";
   try {
     const data = await api("/api/upload", { method: "POST", body });
-    $("uploadMsg").innerHTML = '<span class="ok">' + data.saved.length + (data.saved.length === 1 ? " file aggiunto" : " file aggiunti") + ": li sto leggendo.</span>" + (data.rejected.length ? ' <span class="warn">Non posso leggere: ' + data.rejected.map((r) => esc(r.file)).join(", ") + "</span>" : "");
+    $("uploadMsg").innerHTML = '<span class="ok">' + data.saved.length + (data.saved.length === 1 ? " file aggiunto" : " file aggiunti") + ": li sto leggendo. PDF letti con: " + esc(readAs) + ".</span>" + (data.rejected.length ? ' <span class="warn">Non posso leggere: ' + data.rejected.map((r) => esc(r.file)).join(", ") + "</span>" : "");
     await refreshStatus(); explore($("folder").value.trim());
   } catch (error) { $("uploadMsg").innerHTML = '<span class="warn">' + esc(error.message) + "</span>"; }
 }
@@ -562,7 +569,7 @@ function judgeLine(j) {
 // catalogo (ocr_catalog.json, dal confronto del 16/11/2026) e non scarica niente da sola.
 const READING = { auto: "Automatico", text: "Testo esatto", ocr: "l'OCR" };
 const GUIDE_URL = "https://github.com/Alessandro-os/llmwiki/blob/main/docs/12-installare-un-ocr.md";
-let ocrChoice = null, ocrFound = null, ocrProbe = null, ocrScanned = false, ocrFolders = null;  // ocrFolders: scritte ma non salvate
+let ocrChoice = null, ocrFound = null, ocrSearched = [], ocrProbe = null, ocrScanned = false, ocrFolders = null;  // ocrFolders: scritte ma non salvate
 const readingOptions = (current, withSpace) => (withSpace ? opt("", "Come dice lo spazio", current) : "") +
   opt("auto", "Automatico: testo esatto se c'è, altrimenti l'OCR", current) + opt("text", "Testo esatto (dal PDF)", current) + opt("ocr", "OCR (scansioni, appunti a mano)", current);
 function legend(catalog) {
@@ -619,9 +626,11 @@ function ocrCard(o) {
       '<span class="small muted">Vale per i documenti nuovi; ogni documento si può rileggere in un altro modo dalla sua scheda.</span></div>' + legend(settings.ocr_catalog) +
     '<div class="row"><b>OCR:</b> <span id="ocrChosen">' + ocrName(chosen) + "</span></div>" +
     '<div class="row"><button data-act="ocr-detect">Cerca gli OCR sul computer</button><span id="ocrMsg" class="small"></span></div><div id="ocrList" style="display:grid;gap:6px">' + ocrList() + "</div>" +
+    (ocrFound && !ocrFound.some((f) => f.kind === "local") ? '<div class="small muted">Nessun modello OCR trovato in: ' + esc(ocrSearched.join(" · ") || "nessuna delle cartelle consuete esiste su questo computer") +
+      ". Se il tuo è altrove, scrivi la sua cartella in Opzioni avanzate → «Altre cartelle dove cercare gli OCR» e cerca di nuovo.</div>" : "") +
     (ocrFound && !best && !o.kind ? ocrGuide(usable) : "") +  // finché manca l'OCR consigliato
     "<details" + (folders !== o.folders ? " open" : "") + '><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' +
-      field("ocrFolders", "Altre cartelle dove cercare gli OCR", folders, "text", "Separate da ; . Si cerca già in " + esc(settings.ocr_folder) + ", in LM Studio e in Hugging Face.") +
+      field("ocrFolders", "Altre cartelle dove cercare gli OCR", folders, "text", "Separate da ; . Si cerca già in " + esc(settings.ocr_folder) + ", in LM Studio, in Hugging Face, in Download, sul Desktop e nelle cartelle in cima ai dischi con nomi come AI, models, llama.") +
       '<div class="field"><label for="ocrKind">Quale OCR usare</label><select id="ocrKind">' + opt("", "Nessuno", k) + opt("local", "Un modello OCR sul computer, acceso dall'app", k) +
         opt("server", "Un OCR acceso su un server", k) + opt("tesseract", "Tesseract installato", k) + "</select></div>" +
       '<div data-kind="local" style="display:grid;gap:12px">' + field("ocrModelPath", "Modello (file .gguf)", k === "local" ? chosen.model_path : "", "text") +
@@ -764,7 +773,7 @@ $("settingsPage").addEventListener("click", async (event) => {
     say("ocrMsg", "cerco gli OCR e provo quelli accesi con un'immagine… può volerci un minuto");
     event.target.disabled = true;
     ocrFolders = $("ocrFolders").value.trim();
-    try { ocrFound = (await api("/api/admin/ocr/detect?folders=" + encodeURIComponent(ocrFolders))).found; } finally { event.target.disabled = false; }
+    try { const data = await api("/api/admin/ocr/detect?folders=" + encodeURIComponent(ocrFolders)); ocrFound = data.found; ocrSearched = data.searched || []; } finally { event.target.disabled = false; }
     const good = ocrFound.filter((f) => f.ok).length;
     renderSettings();
     say("ocrMsg", good ? good + (good === 1 ? " OCR pronto: premi «Usa questo»." : " OCR pronti: scegline uno.") : "Nessun OCR pronto sul computer.", !good);

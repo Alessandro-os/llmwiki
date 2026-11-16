@@ -155,8 +155,11 @@ class WikiAgent:
         hits = [hit for hit in self.tools.search(question, limit=8)["results"] if hit["kind"] == "text"][:5]
         if not hits:
             return
-        passages = "\n\n".join(
-            self.tools.read_document(hit["doc"], hit["start_line"], hit["end_line"]) for hit in hits)
+        try:
+            passages = "\n\n".join(
+                self.tools.read_document(hit["doc"], hit["start_line"], hit["end_line"]) for hit in hits)
+        except (ToolError, OSError):  # documento tolto proprio adesso: resta la risposta parziale
+            return
         try:
             data = await self.llm.complete_json(
                 model=self.cfg.llm.agent_model, system=prompts.GROUNDED,
@@ -186,7 +189,8 @@ class WikiAgent:
                 output = await asyncio.to_thread(getattr(self.tools, call.name), **args)
             else:
                 raise ToolError(f"tool sconosciuto: {call.name!r}")
-        except (ToolError, TypeError, ValueError) as exc:
+        except (ToolError, TypeError, ValueError, OSError) as exc:
+            # OSError: una mappa o una scheda riscritta proprio in quell'istante dall'indicizzazione
             entry["error"] = True
             return ToolResult(call.id, f"Errore: {exc}", is_error=True)
         text = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)

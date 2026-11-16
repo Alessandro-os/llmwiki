@@ -19,6 +19,19 @@ def fetch_verified(http, url: str, target: Path, size: int, sha256: str,
     if offset > size:
         part.unlink()
         offset = 0
+    if offset < size:  # già tutto scaricato (interrotto prima del controllo): niente da chiedere,
+        _fetch(http, url, part, offset, progress)  # e il server risponderebbe 416 per sempre
+    digest = hashlib.sha256()
+    with part.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    if digest.hexdigest() != sha256.lower():
+        part.unlink()
+        raise RuntimeError(f"{target.name}: file scaricato corrotto (impronta diversa)")
+    os.replace(part, target)
+
+
+def _fetch(http, url: str, part: Path, offset: int, progress: Callable[[int], None]) -> None:
     headers = {"Range": f"bytes={offset}-"} if offset else {}
     with http.stream("GET", url, headers=headers) as response:
         if offset and response.status_code != 206:
@@ -30,11 +43,3 @@ def fetch_verified(http, url: str, target: Path, size: int, sha256: str,
                 handle.write(block)
                 done += len(block)
                 progress(done)
-    digest = hashlib.sha256()
-    with part.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    if digest.hexdigest() != sha256.lower():
-        part.unlink()
-        raise RuntimeError(f"{target.name}: file scaricato corrotto (impronta diversa)")
-    os.replace(part, target)

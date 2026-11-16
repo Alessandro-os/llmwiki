@@ -12,7 +12,6 @@ import json
 import os
 import re
 import secrets
-from pathlib import Path
 
 from . import apphome, nli, ocr, ocr_local
 from .agent import Answer, WikiAgent
@@ -182,7 +181,7 @@ def find_local_ocr(extra_folders: str = "") -> list[dict]:
     """I modelli OCR GGUF nelle cartelle consuete e in quelle aggiunte, ciascuno con il
     llama-server che lo farà girare. Non si accendono qui: costerebbe secondi e memoria per
     ognuno; "Salva e prova" prova quello scelto."""
-    folders = ocr_local.default_folders() + [Path(f.strip()) for f in extra_folders.split(";") if f.strip()]
+    folders = ocr_local.search_folders(extra_folders)
     servers = ocr_local.find_llama_servers(folders)
     found = []
     for item in ocr_local.find_models(folders):

@@ -7,6 +7,7 @@ l'agente legge, cita, e che il fact-checking va a riprendere.
 from __future__ import annotations
 
 import io
+import logging
 import textwrap
 from html.parser import HTMLParser
 from pathlib import Path
@@ -17,6 +18,9 @@ TEXT_EXT = {
 }
 SUPPORTED = TEXT_EXT | {".html", ".htm", ".pdf", ".docx"}
 MAX_LINE = 240
+# pypdf avvisa a ogni lettura di PDF un po' irregolari ("wrong pointing object", "fontTools is
+# required…"): il testo esce lo stesso e il registro dell'app si riempiva di righe inutili.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
 class ExtractError(Exception):

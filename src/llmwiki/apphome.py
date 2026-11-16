@@ -105,9 +105,9 @@ class Registry:
         folder.mkdir(parents=True, exist_ok=True)
         if not (folder / "wiki.toml").exists():
             cfg = Config.from_dict({"paths": {"docs": DOCS_NAME, "wiki": INDEX_NAME}}, folder)
-            if template is not None:  # il nuovo spazio parte con gli stessi modelli di quello attuale
-                cfg.llm, cfg.index, cfg.verify, cfg.agent = (
-                    template.llm, template.index, template.verify, template.agent)
+            if template is not None:  # il nuovo spazio parte con gli stessi modelli e lo stesso OCR
+                cfg.llm, cfg.index, cfg.ocr, cfg.verify, cfg.agent = (
+                    template.llm, template.index, template.ocr, template.verify, template.agent)
             cfg.path = folder / "wiki.toml"
             cfg.save()
         cfg = Config.load(folder / "wiki.toml")

@@ -68,7 +68,7 @@ niente da sola**. "Cerca gli OCR sul computer" (`app.detect_ocr`) trova tre tipi
 
 | Tipo | Che cos'è | Come si trova |
 |---|---|---|
-| `local` | Un modello GGUF che vede le immagini (modello + parte visiva `mmproj`), che l'app accende da sola con `llama-server` di llama.cpp (`ocr_local.py`) | file nelle cartelle consuete: `%LOCALAPPDATA%\LLMWiki\ocr`, LM Studio, Hugging Face, `%LOCALAPPDATA%\llama.cpp`, più quelle aggiunte in "Altre cartelle dove cercare". `llama-server.exe` nel PATH, installato con winget o nelle stesse cartelle |
+| `local` | Un modello GGUF che vede le immagini (modello + parte visiva `mmproj`), che l'app accende da sola con `llama-server` di llama.cpp (`ocr_local.py`) | file nelle cartelle consuete: `%LOCALAPPDATA%\LLMWiki\ocr`, LM Studio, Hugging Face, `%LOCALAPPDATA%\llama.cpp`, le cartelle in cima ai dischi con un nome da modelli (`AI-Workspace`, `models`, `llama.cpp`…), Download e Desktop (solo due livelli), più quelle aggiunte in "Altre cartelle dove cercare". `llama-server.exe` nel PATH, installato con winget o nelle stesse cartelle |
 | `server` | Un modello già acceso su un server con l'API compatibile OpenAI (Unlimited OCR, DeepSeek-OCR con SGLang o vLLM, llama.cpp, LM Studio) | i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000); ogni modello, fino a 6 per server, deve leggere un'immagine con la scritta `CARNOT 1824` |
 | `tesseract` | Il programma Tesseract installato | PATH e cartelle d'installazione consuete; deve leggere la stessa immagine |
 
@@ -310,7 +310,7 @@ scheda richiede circa 45 secondi.
 
 | Caso | Che cosa fa l'app |
 |---|---|
-| Il modello è spento, sovraccarico o limita le richieste | Il documento torna in coda, non in errore. L'app aspetta 60 secondi e riprova da sola; in basso a sinistra spiega perché è ferma. Lo stesso vale per l'albero. |
+| Il modello è spento, sovraccarico o limita le richieste | Il documento torna in coda, non in errore. L'app aspetta 60 secondi e riprova da sola; in basso a sinistra spiega perché è ferma. Il testo già letto resta salvato e cercabile: al nuovo tentativo non si rilegge il file né si rifà l'OCR (colonne `text_sha` e `text_method` di `state.db`), a meno che il file o il modo di lettura siano cambiati o si prema "Rileggi". Lo stesso vale per l'albero. |
 | Il documento non si può leggere (PDF scansionato, file corrotto) o il modello rifiuta la richiesta | Stato "non letto" con il motivo. |
 | L'app viene chiusa a metà | Al riavvio ciò che era in lettura torna in coda. |
 | Un documento è in errore | Al riavvio viene ritentato, fino a 3 tentativi. "Riprova a leggerli" azzera il conto. Modificare il file lo rimette in coda. |

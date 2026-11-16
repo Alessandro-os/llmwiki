@@ -59,6 +59,7 @@ class Progress:
     ocr: str = ""     # l'OCR che legge le pagine, se il documento passa dall'OCR
     pages: int = 0    # pagine da leggere con l'OCR (ognuna è un passo)
     stopped: bool = False  # lettura interrotta: l'OCR, che gira in un thread, smette alla pagina dopo
+    phase: str = "text"    # "text" mentre si legge il testo, "card" mentre il modello scrive la scheda
 
     engine: object = None  # l'OCR in uso: dice quanta parte della pagina corrente ha letto
 
@@ -207,9 +208,10 @@ class Indexer:
         counts["paused"] = self.paused
         counts["reader"] = self.model_name  # chi legge i documenti ("model" è chi risponde)
         counts["waiting_ocr"] = self.waiting_ocr
+        counts["text_waiting"] = self.store.text_waiting()
         counts["reading"] = [
             {"path": path, "percent": p.percent(), "seconds": round(p.seconds()), "model": p.model,
-             "ocr": p.ocr}
+             "ocr": p.ocr, "phase": p.phase, "page": min(p.done + 1, p.pages), "pages": p.pages}
             for path, p in list(self.reading.items())
         ]
         counts["last_done"] = self.last_done
@@ -338,13 +340,19 @@ class Indexer:
         row = self.store.get_doc(path)
         sha, method = row["sha"], row["method"]
         self.store.set_status(path, "indexing")
-        lines = await self._extract(path, self.store.doc_file(path), progress)
+        how = method or self.cfg.ocr.mode
+        lines = self._saved_text(path, row, how)
+        if lines is None:
+            lines = await self._extract(path, self.store.doc_file(path), progress)
+            self.store.write_atomic(self.store.text_file(path), "\n".join(lines))
+            # Da qui il documento è già cercabile e leggibile, anche senza scheda.
+            await asyncio.to_thread(self.store.index_text, path, lines)
+            self.store.set_text(path, len(lines), sha, how, progress.ocr)
+        else:
+            progress.ocr = row["ocr"]
         if not progress.pages:
             self._step(path)
-        self.store.write_atomic(self.store.text_file(path), "\n".join(lines))
-        self.store.set_lines(path, len(lines))
-        # Da qui il documento è già cercabile e leggibile, anche senza scheda.
-        await asyncio.to_thread(self.store.index_text, path, lines)
+        progress.phase = "card"
         body = await self._summarize(path, lines)
         row = self.store.get_doc(path)
         if row is None or row["sha"] != sha or row["method"] != method:
@@ -365,6 +373,17 @@ class Indexer:
         if progress.ocr or not self.waiting_ocr:  # un file senza OCR non dice che l'OCR è tornato
             self.waiting, self.waiting_ocr = "", False
         self._dirty.set()
+
+    def _saved_text(self, path: str, row, how: str) -> list[str] | None:
+        """Il testo già letto in un tentativo precedente, se file e modo di lettura sono gli
+        stessi: quando il modello non risponde il documento torna in coda, e senza questo a ogni
+        tentativo si rileggeva il PDF da capo (con l'OCR, minuti di lavoro ogni volta)."""
+        if not row["text_sha"] or row["text_sha"] != row["sha"] or row["text_method"] != how:
+            return None
+        try:
+            return self.store.read_lines(path)
+        except OSError:
+            return None
 
     async def _extract(self, path: str, file: Path, progress: Progress) -> list[str]:
         """Il modo scelto per il documento vince su quello dello spazio. L'OCR legge solo i PDF:

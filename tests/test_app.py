@@ -50,7 +50,10 @@ def test_config_roundtrip_keeps_users_and_paths(tmp_path):
 
 def test_spaces_settings_and_users_from_the_ui(tmp_path):
     registry = apphome.Registry()
-    studio = registry.add("Studio", tmp_path / "Studio", template=mock_cfg(tmp_path))
+    template = mock_cfg(tmp_path)
+    template.ocr.kind, template.ocr.path = "tesseract", "C:/Tesseract-OCR/tesseract.exe"
+    studio = registry.add("Studio", tmp_path / "Studio", template=template)
+    assert Config.load(tmp_path / "Studio" / "wiki.toml").ocr.kind == "tesseract"  # anche l'OCR scelto
     hub = Hub(Wiki(Config.load(tmp_path / "Studio" / "wiki.toml")), registry)
     with TestClient(create_app(hub), **LOCAL) as client:
         status = client.get("/api/status").json()
