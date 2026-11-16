@@ -82,6 +82,9 @@ def test_layout_coordinates_are_removed():
     deepseek = "<|ref|>title<|/ref|><|det|>[[10, 20, 300, 60]]<|/det|>\nCiclo di Carnot"
     assert ocr.clean_text(deepseek) == "Ciclo di Carnot"
     assert ocr.clean_text("Il vettore v[1, 2, 3, 4] resta") == "Il vettore v[1, 2, 3, 4] resta"
+    page = ("<PAGE><BLOCK>text[35, 15, 299, 35]<FORK>STATICA DEI FLUIDI\n"
+            "<BLOCK>equation[59, 639, 619, 675]<FORK>$$p = p(x,y,z)$$")  # pagina vera, 16/11
+    assert ocr.clean_text(page) == "STATICA DEI FLUIDI\n$$p = p(x,y,z)$$"
 
 
 def test_probe_accepts_only_an_ocr_that_really_reads():

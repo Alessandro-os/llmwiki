@@ -155,10 +155,36 @@ LaTeX (`$\eta = 1 - T_2/T_1$`) contano come differenze, anche se sono giuste.
 | Strata IQ2_XS con la vista (stesso modello delle risposte) | 0,928 / 0,928 | 3 su 3 | 6 su 6 | 5 | già caricato |
 | Unlimited OCR 2, transformers su Windows | 0,928 / 0,928 | 3 su 3 | 6 su 6 | 24 | 7,4 GB (Strata spento) |
 
-Unlimited OCR 2 gira su Windows anche senza Triton (lo usa solo se c'è), ma con transformers è
-lento: SGLang, consigliato da Baidu, è documentato solo su Linux. Non entra nella scheda insieme a
-Strata (11,4 GB). Su questo PC Strata legge le pagine come Unlimited OCR, 5 volte più in fretta e
-senza memoria in più. Non misurati: scrittura a mano, tabelle, pagine di libro lunghe.
+Questa pagina è troppo facile: su pagine vere il risultato cambia (tabella qui sotto).
+
+**Sei pagine vere** degli appunti dell'università, a 200 dpi come le legge l'app. Il giudizio è
+fatto a mano, confrontando ogni trascrizione con la pagina.
+
+| Pagina | Tesseract (inglese) | Strata IQ2_XS con la vista | Unlimited OCR 2 |
+|---|---|---|---|
+| Teoria: stampato, formule, note a mano (iPad) | stampato quasi giusto; mano e formule illeggibili · 1,4 s | stampato giusto; **inventa una frase in inglese** e ripete 3 volte una formula sbagliata · 43 s | formule stampate esatte in LaTeX, note a mano lette; "p" letto "ρ" due volte · 126 s |
+| Esercizio a mano, quasi tutto disegni | caratteri a caso · 0,5 s | qualche simbolo giusto, parole storpiate ("BEEME" per IDEALE) · 30 s | la tratta come immagine: nessun testo · 1,8 s |
+| Soluzione a mano passata allo scanner | illeggibile · 0,3 s | 4 numeri su 7 giusti; "16,50" per 14,50 · 6 s | 5 numeri su 7 giusti; "43 m" per 49 m · 21 s |
+| Libro stampato in inglese, scansione | testo e numeri giusti · 0,9 s | **"3.1" per 2.1 e "1 bar" per 3 bar** · 9 s | tutto giusto, formule comprese · 96 s |
+| Esercizio a mano fotografato | illeggibile · 1,3 s | testo leggibile, una formula con numeri cambiati · 36 s | testo con qualche parola storpiata, formule giuste · 96 s |
+| Schemi con poche scritte | niente · 0,2 s | due titoli storpiati · 5 s | due titoli storpiati · 4 s |
+| **Totale sei pagine** | **4,6 s** | **129 s** | **345 s** (319 s leggendole tutte insieme) |
+
+Usare Unlimited OCR costa anche il cambio: spegnere Strata 11 s, caricare l'OCR 24 s,
+riaccendere e scaldare Strata 78 s. Memoria della scheda video: 7,4-7,9 GB.
+
+Che cosa ne segue:
+- **Strata non va usato come OCR.** È un modello generico che vede le immagini: quando non
+  legge bene, inventa. Ha cambiato numeri su una pagina stampata e pulita. Il testo letto
+  diventa la fonte delle citazioni, quindi una citazione "confermata" potrebbe confermare un
+  numero inventato.
+- **Unlimited OCR** sbaglia lettere e cifre scritte male, ma non aggiunge cose che non ci sono.
+  Va tenuto per gli appunti, con Strata spento, e costa circa 1-2 minuti a pagina.
+- **Tesseract** basta per il testo stampato, ed è 70 volte più veloce. Con la scrittura a mano
+  e con le formule non serve.
+
+Unlimited OCR 2 gira su Windows con transformers anche senza Triton, che usa solo se c'è.
+SGLang, il modo veloce consigliato da Baidu, è documentato solo per Linux e non l'ho misurato.
 
 ## Dove stanno i dati
 

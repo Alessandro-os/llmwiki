@@ -99,7 +99,9 @@ class ServerOcr(Ocr):
 # Gli OCR "di layout" scrivono dove sta ogni blocco: Unlimited OCR `text[45, 79, 512, 133]Testo`,
 # DeepSeek-OCR `<|ref|>text<|/ref|><|det|>[[45, 79, 512, 133]]<|/det|>`. Per citare serve solo
 # il testo: con le coordinate la somiglianza al testo vero scendeva da 0,93 a 0,78 (misura 16/11).
-_BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>", re.S)
+# Unlimited OCR aggiunge anche segnali di struttura (`<PAGE><BLOCK>…<FORK>`), che vanno tolti
+# prima delle coordinate: altrimenti `<BLOCK>text[…]` non comincia la riga e le coordinate restano.
+_BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>|<(?:PAGE|BLOCK|FORK)>", re.S)
 _BOX_PREFIX = re.compile(r"^[a-z_]+\[\d+(?:,\s*\d+){3}\]", re.M)
 
 
