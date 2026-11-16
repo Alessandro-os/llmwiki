@@ -174,3 +174,10 @@ usa" e "per chi sviluppa". Le cose in sospeso stanno in `DA_FARE.md`.
 Il progetto sta su GitHub in un repository pubblico, `Alessandro-os/llmwiki`. Ogni versione ha
 la sua etichetta (`v0.5.1`) e una release con l'installatore e lo zip.
 `.github/workflows/ci.yml` esegue lint e test a ogni caricamento.
+
+Pubblicare una versione: numero aggiornato nei due posti, `CHANGELOG.md` con la sezione della
+versione, poi l'etichetta caricata su GitHub (`git tag v0.5.1` e `git push origin v0.5.1`).
+`.github/workflows/release.yml` fa il resto su Windows: test, `packaging\build.ps1` (con il
+collaudo dell'eseguibile), installatore, e la pagina della versione con le novità "per chi la
+usa" prese dal `CHANGELOG.md` (`packaging/release_notes.py`) e le impronte SHA-256. Se un passo
+fallisce non si pubblica niente.

@@ -107,3 +107,23 @@ def test_a_download_already_complete_is_checked_without_asking_again(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler)) as http:
         fetch_verified(http, "https://example.test/file.exe", target, len(data), hashlib.sha256(data).hexdigest())
     assert target.read_bytes() == data and not (tmp_path / "file.exe.part").exists()
+
+
+def test_release_notes_come_from_the_changelog(tmp_path):
+    """La pagina della versione su GitHub si scrive da CHANGELOG.md: una fonte sola."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "release_notes", Path(__file__).parent.parent / "packaging" / "release_notes.py")
+    notes = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(notes)
+    log = "# Cronologia\n\n## 9.9.9 · 2026-01-01\n\nPer chi la usa:\n\n- Novità uno.\n\nPer chi sviluppa:\n\n- Interno.\n\n## 9.9.8 · 2025\n\n- Vecchia.\n"
+    assert notes.user_notes(log, "9.9.9") == "- Novità uno."
+    installer = tmp_path / "LLMWiki-9.9.9-setup.exe"
+    installer.write_bytes(b"x")
+    from llmwiki import __version__
+    text = notes.body(__version__, [installer])  # la versione vera c'è sempre nel CHANGELOG
+    assert hashlib.sha256(b"x").hexdigest() + "  LLMWiki-9.9.9-setup.exe" in text and "Interno" not in text
+    with pytest.raises(SystemExit):
+        notes.user_notes(log, "1.2.3")
