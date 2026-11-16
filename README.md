@@ -173,18 +173,54 @@ fatto a mano, confrontando ogni trascrizione con la pagina.
 Usare Unlimited OCR costa anche il cambio: spegnere Strata 11 s, caricare l'OCR 24 s,
 riaccendere e scaldare Strata 78 s. Memoria della scheda video: 7,4-7,9 GB.
 
+**MiniCPM-OCR 1.0 e PaddleOCR-VL 1.6** (OpenBMB e Baidu, Apache 2.0, GGUF ufficiali su
+llama.cpp b12364, MiniCPM Q8_0). Sulle stesse sei pagine, valori controllati a mano (32 tra
+numeri, parole e formule) e valori inventati:
+
+| OCR | Giusti | Inventati | Tempo, scheda video (Strata spento) | Tempo, processore 16 thread (Strata acceso) |
+|---|---|---|---|---|
+| Tesseract | 16 | 0 | — | 4,6 s |
+| Strata IQ2_XS | 19 | **3** | — | 129 s |
+| Unlimited OCR 2 | 27 | 0 | 345 s | non gira |
+| **MiniCPM-OCR** | **27** | 0 | **12 s** (11 s con DSpark) | 169 s |
+| PaddleOCR-VL | 24-25 | 0 | 8,5 s | 211 s |
+
+**Appunti scritti a mano** (sei pagine: Analisi 1, Chimica su quaderno fotografato, Fluidodinamica,
+Meccanica; 77 parole e numeri letti a occhio con certezza; accenti, maiuscole e spazi ignorati):
+
+| OCR | Giusti | Inventa | Tempo per 6 pagine |
+|---|---|---|---|
+| Strata IQ2_XS | 43 (55%) | **sì, frasi scorrevoli ma false** ("Con 3 ellissografi" per "Corpo 3 appoggiato su dischi") | 183 s |
+| **MiniCPM-OCR, pagina in 4 strisce, scheda video** | **35 (45%)** | no: parole storpiate, riconoscibili | **20 s** |
+| MiniCPM-OCR, 4 strisce, processore | 36 (46%) | no | 295 s |
+| MiniCPM-OCR, pagina intera | 29 (37%) | no | 13 s scheda video, 172 s processore |
+| PaddleOCR-VL, 4 strisce, scheda video | 27 (35%) | no | 14 s |
+| PaddleOCR-VL, pagina intera, processore | 17 (22%) | no | 110 s |
+| Tesseract | 1 (1%) | no | 5 s |
+| Unlimited OCR 2 | non misurato | — | incastrato oltre 20 minuti sulla prima pagina (ripeteva), interrotto |
+
+Le strisce sono tagliate dove non c'è inchiostro, così le righe non si spezzano. PaddleOCR-VL su
+una pagina di soli disegni ripete la stessa riga fino al limite: nessun freno di llama.cpp
+(DRY, repeat penalty) lo ferma. L'app ora si ferma alla quarta ripetizione (`ocr.loop_start`).
+
 Che cosa ne segue:
 - **Strata non va usato come OCR.** È un modello generico che vede le immagini: quando non
-  legge bene, inventa. Ha cambiato numeri su una pagina stampata e pulita. Il testo letto
-  diventa la fonte delle citazioni, quindi una citazione "confermata" potrebbe confermare un
-  numero inventato.
-- **Unlimited OCR** sbaglia lettere e cifre scritte male, ma non aggiunge cose che non ci sono.
-  Va tenuto per gli appunti, con Strata spento, e costa circa 1-2 minuti a pagina.
-- **Tesseract** basta per il testo stampato, ed è 70 volte più veloce. Con la scrittura a mano
-  e con le formule non serve.
+  legge bene, inventa, sia numeri sulle pagine stampate sia frasi intere negli appunti a mano.
+  Il testo letto diventa la fonte delle citazioni, quindi una citazione "confermata" potrebbe
+  confermare un numero o una frase inventati.
+- **MiniCPM-OCR è il migliore tra quelli che non inventano**, sullo stampato e a mano, e il più
+  adatto a questo PC. Sulla scheda video legge una pagina in 2-3 s (Strata spento, il cambio
+  costa circa 1,5 minuti); sul processore, senza spegnere niente, in circa 30 s (50 s a strisce).
+- **La scrittura a mano resta difficile per tutti:** il migliore onesto legge meno della metà
+  delle parole controllate.
+- **Unlimited OCR** legge bene lo stampato, ma è 30 volte più lento di MiniCPM e sulla
+  scrittura a mano fitta si è incastrato.
+- **Tesseract** basta per il testo stampato semplice, ed è il più veloce. Con la scrittura a
+  mano e con le formule non serve.
 
 Unlimited OCR 2 gira su Windows con transformers anche senza Triton, che usa solo se c'è.
 SGLang, il modo veloce consigliato da Baidu, è documentato solo per Linux e non l'ho misurato.
+Campione piccolo (12 pagine): da rifare su più pagine prima di decidere per tutti.
 
 ## Dove stanno i dati
 

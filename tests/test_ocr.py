@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 
 import httpx
 import pytest
@@ -71,6 +72,28 @@ def test_server_ocr_reads_and_reports_problems_like_a_model():
     with pytest.raises(OcrError) as rejected:
         refused.read(b"png")
     assert not rejected.value.unavailable
+
+
+def streaming_server(pieces: list[str]):
+    """Un server che manda il testo a pezzi (stream), come llama.cpp e vLLM."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        events = "".join(f'data: {{"choices": [{{"delta": {{"content": {json.dumps(p)}}}}}]}}\n\n' for p in pieces)
+        return httpx.Response(200, text=events + "data: [DONE]\n\n", headers={"content-type": "text/event-stream"})
+
+    return httpx.MockTransport(handler)
+
+
+def test_streamed_text_is_read_and_a_loop_is_cut():
+    plain = ServerOcr("http://ocr.test/v1", "m", transport=streaming_server(["Il ciclo ", "di Carnot."]))
+    assert plain.read(b"png") == "Il ciclo di Carnot."
+    # PaddleOCR-VL su una pagina di soli disegni (misura vera): la stessa riga fino al limite
+    unit = "①\n②\n③\n④\n⑤\n⑥\n⑦\n⑧\n⑨\n\nconcorde\n\n"
+    looping = ServerOcr("http://ocr.test/v1", "m", transport=streaming_server(["B\n\n"] + [unit] * 300))
+    text = looping.read(b"png")
+    assert text.startswith("B") and text.count("concorde") <= 4 and len(text) < 400
+    real = "riga uno della tabella | 10 | 20\n" * 3  # poche ripetizioni vere restano
+    assert ocr.loop_start(real) is None
 
 
 def test_layout_coordinates_are_removed():

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import os
 import re
@@ -73,24 +74,49 @@ class ServerOcr(Ocr):
         import httpx
 
         image = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-        body = {"model": self.model, "temperature": 0, "max_tokens": 4096, "messages": [
+        body = {"model": self.model, "temperature": 0, "max_tokens": 4096, "stream": True, "messages": [
             {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image}},
                                          {"type": "text", "text": PROMPT}]}]}
         try:
-            response = self._http.post(self.base_url + "/chat/completions", json=body)
+            with self._http.stream("POST", self.base_url + "/chat/completions", json=body) as response:
+                self._check(response)
+                content = self._collect(response)
         except httpx.HTTPError as exc:
             raise OcrError(f"l'OCR su {self.base_url} non risponde ({exc.__class__.__name__})",
                            unavailable=True) from exc
+        return clean_text(strip_thinking(content))
+
+    def _check(self, response) -> None:
         if response.status_code >= 500 or response.status_code in (408, 409, 429):
             raise OcrError(f"l'OCR su {self.base_url} è occupato o spento ({response.status_code})",
                            unavailable=True)
         if response.status_code >= 400:
+            response.read()
             raise OcrError(f"l'OCR ha rifiutato la pagina ({response.status_code}): {response.text[:200]}")
-        try:
-            content = response.json()["choices"][0]["message"].get("content") or ""
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
-            raise OcrError("l'OCR ha risposto in un formato che non conosco") from exc
-        return clean_text(strip_thinking(content))
+
+    @staticmethod
+    def _collect(response) -> str:
+        """Il testo arriva a pezzi (stream). Un server che non li manda risponde in un colpo solo."""
+        if "text/event-stream" not in response.headers.get("content-type", ""):
+            response.read()
+            try:
+                return response.json()["choices"][0]["message"].get("content") or ""
+            except (ValueError, KeyError, IndexError, TypeError) as exc:
+                raise OcrError("l'OCR ha risposto in un formato che non conosco") from exc
+        text = ""
+        for line in response.iter_lines():
+            if not line.startswith("data:") or line.strip() == "data: [DONE]":
+                continue
+            try:
+                choice = json.loads(line[5:])["choices"][0]
+            except (ValueError, KeyError, IndexError, TypeError):
+                continue
+            text += (choice.get("delta") or {}).get("content") or ""
+            cut = loop_start(text)
+            if cut is not None:  # il modello gira a vuoto: si tiene ciò che c'era prima
+                log.warning("l'OCR ripeteva lo stesso testo: interrotto dopo %d caratteri", cut)
+                return text[:cut]
+        return text
 
     def close(self) -> None:
         self._http.close()
@@ -103,6 +129,24 @@ class ServerOcr(Ocr):
 # prima delle coordinate: altrimenti `<BLOCK>text[…]` non comincia la riga e le coordinate restano.
 _BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>|<(?:PAGE|BLOCK|FORK)>", re.S)
 _BOX_PREFIX = re.compile(r"^[a-z_]+\[\d+(?:,\s*\d+){3}\]", re.M)
+
+
+LOOP_SPAN, LOOP_TIMES = 80, 4
+
+
+def loop_start(text: str) -> int | None:
+    """Gli OCR piccoli, davanti a una pagina di soli disegni, possono ripetere la stessa riga
+    fino al limite (PaddleOCR-VL: 4.096 pezzi e 100 secondi per "①…⑨ concorde", misura 16/11;
+    nessun freno di llama.cpp lo ferma). Se gli ultimi 80 caratteri compaiono già 4 volte, il
+    testo gira a vuoto: restituisce dove comincia la ripetizione, altrimenti None."""
+    if len(text) < LOOP_SPAN * LOOP_TIMES:
+        return None
+    tail = text[-LOOP_SPAN:]
+    if text.count(tail) < LOOP_TIMES:
+        return None
+    first = text.find(tail)
+    second = text.find(tail, first + 1)
+    return second if second > 0 else None
 
 
 def clean_text(text: str) -> str:
