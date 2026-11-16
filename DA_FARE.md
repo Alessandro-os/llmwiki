@@ -53,6 +53,22 @@ In ordine di importanza, secondo me.
 8. **Scegli licenza e nome definitivo prima di pubblicare**, e firma l'eseguibile se andrà a
    persone che non ti conoscono.
 
+## Per la prossima versione (0.5.1)
+
+- [ ] **La ricerca degli OCR non trova i modelli tenuti in una cartella propria.** Con la 0.5.0
+  installata, MiniCPM-OCR in `C:\AI-Workspace\modelli\llama.cpp\modelli\MiniCPM-OCR-1.0` non
+  compare: da sola la ricerca guarda solo la cartella `ocr` dell'app, LM Studio, Hugging Face
+  e `%LOCALAPPDATA%\llama.cpp` (`ocr_local.default_folders`). Nella prova del 16/11 lo trovava
+  solo perché la cartella era scritta in "Altre cartelle dove cercare".
+  - **Correzione proposta:** cercare da sola anche
+    - nelle cartelle in cima ai dischi con nomi da modelli (`AI`, `models`, `llm`, `llama`…);
+    - in Download, Documenti e Desktop.
+
+    Sempre con il limite di profondità, perché la ricerca resti veloce: tempo da misurare.
+  - **Se non trova niente,** dire in quali cartelle ha guardato e come aggiungerne una.
+  - **Test:** un modello in una cartella "AI" finta sotto un disco finto.
+  - **Nel frattempo:** Opzioni avanzate → "Altre cartelle dove cercare" → `C:\AI-Workspace\modelli`.
+
 ## Sviluppi possibili
 
 - [ ] Ricerca per significato oltre che per parole (embedding): richiede di scaricare un
