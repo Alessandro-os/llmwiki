@@ -291,8 +291,9 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
         async def events():
             try:
                 while True:
-                    try:
-                        item = await asyncio.wait_for(queue.get(), timeout=15)
+                    try:  # asyncio.timeout: wait_for di Python 3.11 può perdere la chiusura
+                        async with asyncio.timeout(15):
+                            item = await queue.get()
                     except TimeoutError:
                         yield '{"type": "ping"}\n'  # tiene viva la connessione nelle attese lunghe
                         continue

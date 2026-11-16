@@ -37,6 +37,8 @@ Per chi la usa:
 - Due avvii a pochi secondi di distanza (l'installatore e un doppio clic) non danno più
   l'errore "il server interno non è partito": la seconda copia aspetta la prima e la porta in
   primo piano.
+- Salvare le impostazioni due volte di seguito poteva lasciare l'app appesa, senza risposta:
+  ora lo spazio si chiude e si riapre sempre.
 
 Per chi sviluppa:
 
@@ -70,6 +72,10 @@ Per chi sviluppa:
   `/favicon.ico` e `/icon.png`, pubbliche.
 - `desktop._claim_instance()`: lucchetto su `llmwiki.lock` per una sola copia. Test:
   `test_second_launch_while_the_first_is_starting_does_not_fail`.
+- `asyncio.timeout` al posto di `asyncio.wait_for` (sorveglianza della cartella, flusso delle
+  risposte): in Python 3.11 `wait_for` perde l'annullamento se arriva nello stesso istante in
+  cui l'attesa finisce, e `Indexer.stop()` restava appeso. Test:
+  `test_closing_right_after_a_rescan_request_does_not_hang`.
 
 ## 0.4.1 · 2026-11-15
 

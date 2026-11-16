@@ -155,8 +155,11 @@ class Indexer:
             except Exception as exc:  # la sorveglianza non deve morire per un file illeggibile
                 log.exception("scansione fallita")
                 self.last_error = f"scansione: {exc}"
+            # asyncio.timeout e non wait_for: in Python 3.11 wait_for perde la chiusura se arriva
+            # nello stesso istante della richiesta di rilettura, e lo spazio non si chiude più.
             try:
-                await asyncio.wait_for(self._rescan.wait(), timeout=self.cfg.index.watch_seconds)
+                async with asyncio.timeout(self.cfg.index.watch_seconds):
+                    await self._rescan.wait()
             except TimeoutError:
                 pass
             self._rescan.clear()

@@ -383,3 +383,24 @@ def test_mcp_over_http_with_token(tmp_path):
                                            "arguments": {"doc": "contratti/acne.md"}}, 4)
         assert wrong["isError"] and "contratti/acme.md" in wrong["content"][0]["text"]
     wiki.store.close()
+
+
+def test_closing_right_after_a_rescan_request_does_not_hang(tmp_path):
+    """Salvare le impostazioni chiede di rileggere la cartella e subito dopo chiude lo spazio.
+    Con asyncio.wait_for di Python 3.11, se l'attesa finiva nello stesso istante in cui arrivava
+    la chiusura, la chiusura andava persa e il salvataggio successivo restava appeso per sempre."""
+    cfg = make_cfg(tmp_path, watch_seconds=3600)
+    cfg.docs_dir.mkdir(parents=True)
+
+    async def scenario():
+        for turns in range(6):  # l'istante esatto della chiusura cambia di giro in giro
+            wiki = Wiki(cfg)
+            await wiki.indexer.start()
+            await asyncio.sleep(0.2)  # la sorveglianza aspetta la prossima richiesta
+            wiki.indexer.trigger()
+            for _ in range(turns):
+                await asyncio.sleep(0)
+            await asyncio.wait_for(wiki.indexer.stop(), timeout=5)
+            await wiki.aclose()
+
+    asyncio.run(scenario())

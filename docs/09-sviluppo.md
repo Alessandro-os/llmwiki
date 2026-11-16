@@ -85,7 +85,7 @@ spazi veri.
 
 | File | Che cosa copre |
 |---|---|
-| `test_pipeline.py` | Albero e aggiornamento incrementale, file spostati, file modificati durante la lettura, lettura in parallelo, documenti lunghi a pezzi, risposta con citazioni verificate, percorsi che non possono uscire dallo spazio, caricamento e accessi dal server, MCP via rete con token |
+| `test_pipeline.py` | Albero e aggiornamento incrementale, file spostati, file modificati durante la lettura, chiusura dello spazio subito dopo una richiesta di rilettura, lettura in parallelo, documenti lunghi a pezzi, risposta con citazioni verificate, percorsi che non possono uscire dallo spazio, caricamento e accessi dal server, MCP via rete con token |
 | `test_extract.py` | PDF, Word, HTML, codifiche, righe lunghe, nomi di file accentati |
 | `test_backends.py` | I due protocolli contro server finti: strumenti, giudice senza logprob, parametri facoltativi rifiutati da Claude, server spento non scambiato per server senza logprob |
 | `test_independence.py` | Modello che rifiuta o ignora gli strumenti, modalità testuale forzata, contesto piccolo, lettura che aspetta il modello invece di fallire, chiave sbagliata segnalata senza riprovare all'infinito |
