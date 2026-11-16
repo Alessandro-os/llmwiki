@@ -96,7 +96,8 @@ non lanciare lavori pesanti.
   `pyproject.toml` e `src/llmwiki/__init__.py`.
 - `DA_FARE.md` è l'elenco unico delle cose in sospeso: tienilo aggiornato, non creare altri elenchi.
 - **Commit** piccoli e frequenti, in italiano: titolo che dice l'effetto, corpo che spiega il
-  perché, in fondo la riga `Co-Authored-By:` del modello che ha fatto il lavoro. Mai push.
+  perché, in fondo la riga `Co-Authored-By:` del modello che ha fatto il lavoro. A lavoro finito
+  e verde, push sul ramo di lavoro (su `main` solo se l'utente lo chiede).
 
 ## Come si riferisce all'utente
 
@@ -114,8 +115,7 @@ raccomandazione.
 
 ## Confini
 
-- Mai push su GitHub, mai credenziali o chiavi inserite da te, mai l'indirizzo email
-  dell'utente fuori dal git locale.
+- Mai credenziali o chiavi inserite da te, mai l'indirizzo email dell'utente fuori dal git.
 - Non toccare `file personale per i comandi da terminale.txt`.
 - Mai riavviare, scaricare o cambiare il modello di Strata senza il suo sì: ferma opencode e pi.
 - Installare programmi (winget e simili): lo chiedi all'utente e gli dai il comando.
