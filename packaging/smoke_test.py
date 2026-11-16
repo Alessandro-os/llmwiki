@@ -80,6 +80,7 @@ def main() -> int:
                 checks.append(("espone gli strumenti MCP", len(tools["result"]["tools"]) >= 9))
                 settings = client.get("/api/admin/settings").json()
                 checks.append(("apre le impostazioni", settings["desktop"] is True))
+                checks.append(("contiene il catalogo degli OCR", bool(settings["ocr_catalog"]["ocr"])))
                 page = client.get("/").text
                 checks.append(("serve l'interfaccia", "LLMWiki" in page and "ask/stream" in page))
                 client.post("/api/admin/quit")
