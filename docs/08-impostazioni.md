@@ -55,8 +55,9 @@ Come leggere i PDF ([pagina 2](02-lettura-dei-documenti.md), 2.2.1).
 
 | Voce | Predefinito | App | Effetto |
 |---|---|---|---|
-| `mode` | `"text"` | sì | `text`: il testo che il PDF contiene; `ocr`: ogni pagina letta come immagine dall'OCR scelto |
-| `kind` | `""` | sì | `server` (un modello che legge immagini, API compatibile OpenAI) oppure `tesseract` |
+| `mode` | `"auto"` | sì | `auto`: testo esatto se il PDF lo contiene, altrimenti OCR; `text`: solo il testo del PDF; `ocr`: ogni pagina letta come immagine. Un documento può avere il suo modo ("Rileggi") |
+| `kind` | `"minicpm"` | sì | `minicpm` (MiniCPM-OCR gestito dall'app), `server` (un altro OCR, API compatibile OpenAI) oppure `tesseract` |
+| `llama_server` | `""` | sì | Solo `minicpm`: un `llama-server.exe` già installato, al posto di quello scaricato |
 | `base_url`, `model` | `""` | sì | Solo `server`: indirizzo e nome del modello |
 | `api_key_env` | `""` | API | Solo `server`: variabile con la chiave, se il server ne chiede una |
 | `path`, `language` | `""`, `"ita+eng"` | sì | Solo `tesseract`: percorso del programma e lingue installate da usare |

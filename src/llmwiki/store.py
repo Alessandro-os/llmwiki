@@ -67,7 +67,9 @@ DOC_COLUMNS = {
     "seconds": "REAL NOT NULL DEFAULT 0",  # durata della lettura
     "read_at": "REAL NOT NULL DEFAULT 0",  # quando è stata finita
     "ocr": "TEXT NOT NULL DEFAULT ''",     # OCR che ha letto le pagine, se è passato dall'OCR
+    "method": "TEXT NOT NULL DEFAULT ''",  # modo di lettura scelto per il documento ('' = dello spazio)
 }
+METHODS = ("", "auto", "text", "ocr")
 
 FTS_CHUNK = 30
 FTS_OVERLAP = 5
@@ -241,6 +243,14 @@ class Store:
                 " model=?, seconds=?, read_at=?, ocr=? WHERE path=?",
                 (title, summary_sha, now, model, round(seconds, 1), now, ocr, path),
             )
+
+    def set_method(self, path: str, method: str) -> None:
+        """Il documento si rilegge con il modo indicato ('' = quello dello spazio)."""
+        if method not in METHODS:
+            raise ValueError(f"modo di lettura non valido: {method!r}")
+        with self.lock:
+            self.db.execute("UPDATE docs SET method=?, status='pending', error='', attempts=0, updated=?"
+                            " WHERE path=?", (method, time.time(), path))
 
     def move_doc(self, old: str, new: str, size: int, mtime: float) -> None:
         """Il documento ha cambiato percorso ma non contenuto: restano testo e scheda."""

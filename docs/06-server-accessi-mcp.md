@@ -49,6 +49,8 @@ Tutte sotto `/api/admin/`, raggiungibili solo dal computer su cui gira l'app.
 | `POST model/download` | Avvia lo scaricamento del decision model |
 | `GET errors`, `POST retry-errors` | Documenti non letti; li rimette in coda |
 | `POST index/pause`, `POST index/resume` | Ferma la lettura dei documenti (le letture in corso tornano in coda) e la riprende |
+| `POST doc-method` | Rilegge un documento con il modo indicato (`auto`, `text`, `ocr`, vuoto = quello dello spazio) |
+| `GET ocr/detect`, `POST ocr/test`, `POST ocr/install` | Cerca gli OCR sul computer, prova quello salvato, scarica MiniCPM-OCR |
 | `POST update` | Solo app desktop: scarica la versione nuova trovata su GitHub, ne controlla l'impronta, avvia l'installatore e chiude l'app |
 | `POST open-folder` | Apre la cartella dei documenti in Esplora file |
 | `POST users`, `DELETE users/{nome}` | Crea una persona e restituisce il suo token una volta sola; la rimuove |

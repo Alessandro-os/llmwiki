@@ -82,6 +82,7 @@
   form#ask { padding: 14px clamp(16px, 4vw, 44px) 20px; }
   form#ask > div { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
   form#ask textarea { resize: none; min-height: 48px; }
+  .legend { display: grid; gap: 6px; background: var(--soft); border-radius: 10px; padding: 10px 12px; }
   form#ask > #updateRow { margin-top: 8px; justify-content: flex-end; }
   .topbar { display: flex; justify-content: flex-end; gap: 8px; padding: 10px clamp(16px, 4vw, 44px) 0; min-height: 10px; }
 
@@ -141,6 +142,8 @@
       <input type="file" id="files" multiple hidden>
       <div class="field"><label for="folder">In quale cartella metterli (facoltativo)</label>
         <input type="text" id="folder" placeholder="per esempio: contratti/2026"></div>
+      <div class="field"><label for="readAs">Come leggere i PDF (facoltativo)</label><select id="readAs"></select>
+        <span class="small muted">Testo esatto per i PDF fatti al computer, MiniCPM-OCR per scansioni e appunti a mano. Il dettaglio è in Impostazioni → Lettura dei documenti.</span></div>
       <div class="row"><button id="openFolder" hidden>Apri la cartella sul computer</button><span id="uploadMsg" class="small"></span></div>
     </div>
     <div id="browser"></div>
@@ -317,7 +320,7 @@ async function pollJudge() {
   const s = await api("/api/admin/settings").catch(() => null); if (!s) return;
   const j = s.judge_model, el = $("judgeMsg");
   if (el) el.textContent = j.status === "downloading" ? "scarico… " + Math.round(100 * j.done / j.total) + "%" : j.status === "error" ? "non riuscito: " + j.error : "";
-  if (j.status === "downloading") setTimeout(pollJudge, 1500); else refreshStatus();
+  if (j.status === "downloading" || s.ocr_engine.status === "downloading") setTimeout(pollJudge, 1500); else refreshStatus();
 }
 async function useServer(server) {
   const model = server.models[0];
@@ -483,8 +486,14 @@ function readBy(read) {
 }
 async function openDoc(doc) {
   const data = await api("/api/summary?doc=" + encodeURIComponent(doc));
-  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="doc"><div class="small muted">' + readBy(data.read) + " · " + esc(doc) + "</div>" + md(data.text) + '</div><div class="row" style="margin-top:10px"><button id="fullText">Leggi il testo originale</button></div>';
+  const reread = S && S.local && /\.pdf$/i.test(doc) ? '<span style="flex:1"></span><select id="rereadAs" aria-label="Rileggi con" style="width:auto">' + readingOptions((data.read || {}).method || "", true) + '</select><button id="reread">Rileggi</button>' : "";
+  $("browser").innerHTML = crumbs(parentOf(doc)) + '<div class="doc"><div class="small muted">' + readBy(data.read) + " · " + esc(doc) + "</div>" + md(data.text) + '</div><div class="row" style="margin-top:10px"><button id="fullText">Leggi il testo originale</button>' + reread + "</div>";
   $("fullText").onclick = () => openText(doc, 1, 0);
+  if (reread) $("reread").onclick = async () => {
+    const method = $("rereadAs").value;
+    if (!confirm("Rileggo «" + baseName(doc) + "» con " + (READING[method] || "il modo dello spazio") + "? La scheda viene riscritta.")) return;
+    try { await post("/api/admin/doc-method", { doc, method }); $("reread").textContent = "In coda…"; $("reread").disabled = true; refreshStatus(); } catch (error) { alert(error.message); }
+  };
 }
 async function openText(doc, start, end, hiStart, hiEnd) {
   const data = await api("/api/document?doc=" + encodeURIComponent(doc) + "&start=" + start + "&end=" + end);
@@ -506,6 +515,7 @@ async function uploadFiles(files) {
   if (!files.length) return;
   const body = new FormData(); for (const file of files) body.append("files", file);
   body.append("folder", $("folder").value.trim());
+  body.append("method", $("readAs").value);
   $("uploadMsg").textContent = "Carico " + files.length + " file…";
   try {
     const data = await api("/api/upload", { method: "POST", body });
@@ -547,43 +557,59 @@ function judgeLine(j) {
   return j.status === "ready" ? '<span class="ok">✓ installato</span>' : j.status === "downloading" ? "scarico… " + Math.round(100 * j.done / j.total) + "%" : j.status === "error" ? '<span class="warn">scaricamento non riuscito: ' + esc(j.error) + "</span>" : "non installato";
 }
 
-// ---------------------------------------------------------------- OCR (stesso schema della scelta del modello)
+// ---------------------------------------------------------------- OCR: come leggere i PDF
+// La leggenda riassume il confronto del 16/11/2026 su 12 pagine vere (README, "Confronto degli OCR").
+const READING = { auto: "Automatico", text: "Testo esatto", ocr: "MiniCPM-OCR" };
+const LEGEND = '<div class="legend small"><b>Chi fa meglio che cosa</b>' +
+  '<div><b>Testo esatto</b> · PDF nati al computer (Word, slide, LaTeX): perfetto e istantaneo. Non legge scansioni né appunti a mano.</div>' +
+  "<div><b>MiniCPM-OCR</b> · scansioni, foto, appunti a mano. Lo stampato lo legge quasi perfetto, la scrittura a mano circa a metà. " +
+  "Non inventa: quando non capisce scrive parole storpiate, che si riconoscono. 2-3 secondi a pagina se la scheda video è libera, 30-50 secondi se no.</div>" +
+  '<div class="muted">Automatico usa il testo esatto quando il PDF lo contiene, MiniCPM-OCR quando è una scansione. ' +
+  "I modelli generici che vedono le immagini (come Strata) non vanno usati come OCR: inventano frasi e numeri.</div></div>";
 let ocrChoice = null, ocrFound = null, ocrProbe = null;
+const readingOptions = (current, withSpace) => (withSpace ? opt("", "Come dice lo spazio", current) : "") +
+  opt("auto", "Automatico: testo esatto se c'è, altrimenti MiniCPM-OCR", current) + opt("text", "Testo esatto (dal PDF)", current) + opt("ocr", "MiniCPM-OCR (scansioni, appunti a mano)", current);
 function ocrName(o) {
-  return o.kind === "server" && o.model ? esc(o.model) + ' <span class="muted">su ' + esc(o.base_url) + "</span>" : o.kind === "tesseract" && o.path ? "Tesseract (" + esc(o.language) + ")" : '<span class="muted">nessuno collegato</span>';
+  return o.kind === "server" && o.model ? esc(o.model) + ' <span class="muted">su ' + esc(o.base_url) + "</span>" : o.kind === "tesseract" && o.path ? "Tesseract (" + esc(o.language) + ")" : "MiniCPM-OCR";
+}
+function engineLine(e) {
+  return e.status === "ready" ? '<span class="ok">✓ pronto</span>' : e.status === "downloading" ? "scarico… " + Math.round(100 * e.done / e.total) + "%"
+    : (e.status === "error" ? '<span class="warn">scaricamento non riuscito: ' + esc(e.error) + "</span> " : "non scaricato ") + '<button data-act="ocr-install">Scarica (1,7 GB)</button>';
 }
 function ocrList() {
   if (!ocrFound) return "";
-  if (!ocrFound.length) return '<span class="warn small">Nessun OCR trovato. Accendi il server del tuo OCR (per esempio Unlimited OCR) o installa Tesseract, poi riprova.</span>';
+  if (!ocrFound.length) return '<span class="warn small">Nessun altro OCR trovato sul computer.</span>';
   return ocrFound.map((f, i) => '<div class="row"><span style="flex:1">' + (f.ok ? "✓ " : "· ") + esc(f.name) +
     (f.ok ? ' <span class="muted small">legge l\'immagine di prova in ' + f.seconds + " s</span>" : ' <span class="muted small">' + esc(f.error) + "</span>") +
     (f.note ? '<br><span class="warn small">' + esc(f.note) + "</span>" : "") + "</span>" + (f.ok ? '<button data-act="ocr-use" data-i="' + i + '">Usa questo</button>' : "") + "</div>").join("");
 }
-function ocrCard(o) {
-  const chosen = ocrChoice || o, list = ocrList();
-  return '<div class="field"><label for="ocrMode">Come leggere i PDF</label><select id="ocrMode">' +
-      opt("text", "Normale: il testo contenuto nel PDF (veloce)", o.mode) + opt("ocr", "OCR: legge le pagine come immagini (scansioni, appunti a mano)", o.mode) + "</select></div>" +
-    '<div id="ocrBox"' + (o.mode === "ocr" ? "" : " hidden") + ' style="display:grid;gap:10px">' +
-      '<div class="row"><b>OCR:</b> <span id="ocrChosen">' + ocrName(chosen) + "</span></div>" +
-      '<div class="row"><button data-act="ocr-detect">Cerca gli OCR sul computer</button><span id="ocrMsg" class="small"></span></div><div id="ocrList" style="display:grid;gap:6px">' + list + "</div>" +
-      '<details><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' +
-        field("ocrUrl", "Indirizzo di un server OCR", chosen.kind === "server" ? chosen.base_url : "", "text", "Compatibile OpenAI, per esempio http://127.0.0.1:10000/v1") +
-        field("ocrModel", "Nome del modello OCR", chosen.kind === "server" ? chosen.model : "", "text") +
-        field("ocrPath", "Oppure: percorso di tesseract.exe", chosen.kind === "tesseract" ? chosen.path : "", "text") + "</div></details></div>" +
+function ocrCard(o, engine) {
+  const chosen = ocrChoice || o;
+  return '<div class="field"><label for="ocrMode">Come leggere i PDF</label><select id="ocrMode">' + readingOptions(o.mode) + "</select>" +
+      '<span class="small muted">Vale per i documenti nuovi; ogni documento si può rileggere in un altro modo dalla sua scheda.</span></div>' + LEGEND +
+    (o.kind === "minicpm" ? '<div class="row"><b>MiniCPM-OCR:</b> ' + engineLine(engine) + "</div>" + (engine.status === "downloading" ? '<div class="bar"><div style="width:' + (100 * engine.done / engine.total) + '%"></div></div>' : "")
+      : '<div class="row"><b>OCR:</b> <span id="ocrChosen">' + ocrName(chosen) + "</span></div>") +
+    '<details><summary>Opzioni avanzate: un altro OCR</summary><div style="display:grid;gap:12px">' +
+      '<div class="field"><label for="ocrKind">Quale OCR usare</label><select id="ocrKind">' + opt("minicpm", "MiniCPM-OCR, gestito dall'app (consigliato)", chosen.kind) +
+        opt("server", "Un altro OCR acceso su un server", chosen.kind) + opt("tesseract", "Tesseract installato", chosen.kind) + "</select></div>" +
+      field("llamaServer", "llama-server.exe già installato (facoltativo)", o.llama_server, "text", "Per usare un llama.cpp che hai già, invece di scaricarlo.") +
+      '<div class="row"><button data-act="ocr-detect">Cerca altri OCR sul computer</button><span id="ocrMsg" class="small"></span></div><div id="ocrList" style="display:grid;gap:6px">' + ocrList() + "</div>" +
+      field("ocrUrl", "Indirizzo di un server OCR", chosen.kind === "server" ? chosen.base_url : "", "text", "Compatibile OpenAI, per esempio http://127.0.0.1:10000/v1") +
+      field("ocrModel", "Nome del modello OCR", chosen.kind === "server" ? chosen.model : "", "text") +
+      field("ocrPath", "Percorso di tesseract.exe", chosen.kind === "tesseract" ? chosen.path : "", "text") + "</div></details>" +
     '<div class="row"><button class="primary" data-act="save-ocr">Salva e prova</button><span id="ocrSaveMsg" class="small"></span></div><div id="ocrProbe">' + ocrReport(ocrProbe) + "</div>";
 }
 function ocrReport(p) {
   if (!p) return "";
-  return p.ok ? '<div class="notice good">✓ L\'OCR funziona: ha letto «' + esc(p.text) + "» in " + p.seconds + " secondi. I PDF in attesa ripartono da soli.</div>"
+  return p.ok ? '<div class="notice good">✓ L\'OCR funziona: ha letto «' + esc(p.text) + "» in " + p.seconds + " secondi.</div>"
     : '<div class="notice"><b>L\'OCR non funziona.</b> ' + esc(p.error) + "</div>";
 }
 function formOcr() {
-  const mode = $("ocrMode").value, url = $("ocrUrl").value.trim(), model = $("ocrModel").value.trim(), path = $("ocrPath").value.trim();
-  if (url && model) return { mode, kind: "server", base_url: url, model, path: "" };
-  if (path) return { mode, kind: "tesseract", path, base_url: "", model: "", language: (ocrChoice && ocrChoice.language) || settings.ocr.language || "eng" };
-  return { mode };
+  const kind = $("ocrKind").value, base = { mode: $("ocrMode").value, kind, llama_server: $("llamaServer").value.trim() };
+  if (kind === "server") return Object.assign(base, { base_url: $("ocrUrl").value.trim(), model: $("ocrModel").value.trim() });
+  if (kind === "tesseract") return Object.assign(base, { path: $("ocrPath").value.trim(), language: (ocrChoice && ocrChoice.language) || settings.ocr.language || "eng" });
+  return base;
 }
-
 function renderSettings() {
   const s = settings, l = s.llm, j = s.judge_model, preset = presetOf(l), shared = !["127.0.0.1", "localhost"].includes(s.server.host);
   const same = l.summary_model === l.agent_model && l.judge_model === l.agent_model;
@@ -618,7 +644,7 @@ function renderSettings() {
       '<label class="row"><input type="checkbox" id="shared"' + (shared ? " checked" : "") + (s.users.length ? "" : " disabled") + "> Rendi l'app raggiungibile dagli altri computer della rete</label>" +
       '<div class="small muted">' + (s.users.length ? "Indirizzo da dare agli altri: <code>http://NOME-DI-QUESTO-COMPUTER:" + s.server.port + "</code>. La modifica vale dal prossimo avvio dell'app." : "Aggiungi almeno una persona per poter condividere.") + '</div><div class="row"><button data-act="save-share">Salva</button><span id="shareMsg" class="small"></span></div></div>' +
 
-    '<div class="card"><h3>Lettura dei documenti</h3>' + ocrCard(s.ocr) + '<div id="errorList" class="small"></div>' +
+    '<div class="card"><h3>Lettura dei documenti</h3>' + ocrCard(s.ocr, s.ocr_engine) + '<div id="errorList" class="small"></div>' +
       '<details><summary>Opzioni avanzate</summary><div style="display:grid;gap:12px">' + field("concurrency", "Quanti documenti leggere insieme", s.index.concurrency, "number", "Con un modello sul tuo computer di solito 1 o 2; con un servizio online anche 8.") + '<div class="row"><button data-act="save-index">Salva</button><span id="indexMsg" class="small"></span></div></div></details></div>' +
 
     (s.desktop ? '<div class="card"><h3>Chiudere l\'app</h3><p class="muted small" style="margin:0">Chiudere la finestra non ferma LLMWiki: resta l\'icona vicino all\'orologio, così la lettura dei documenti continua.</p><div class="row"><button data-act="quit">Chiudi LLMWiki</button></div></div>' : "") +
@@ -627,7 +653,7 @@ function renderSettings() {
   api("/api/admin/errors").then((d) => {
     $("errorList").innerHTML = d.errors.length ? "<b>" + d.errors.length + " file non letti</b>" + d.errors.map((e) => '<div class="warn">' + esc(e.doc) + ": " + esc(e.error) + "</div>").join("") + '<div class="row" style="margin-top:8px"><button data-act="retry">Riprova a leggerli</button></div>' : '<span class="muted">Tutti i file sono stati letti senza problemi.</span>';
   }).catch(() => {});
-  if (j.status === "downloading") setTimeout(() => { if ($("settings").classList.contains("on")) loadSettings(); }, 1500);
+  if (j.status === "downloading" || s.ocr_engine.status === "downloading") setTimeout(() => { if ($("settings").classList.contains("on")) loadSettings(); }, 1500);
 }
 function showPreset() {
   const id = $("preset").value, p = settings.providers.find((x) => x.id === id) || { key: "" };
@@ -660,7 +686,6 @@ async function loadModels(say) {
 }
 $("settingsPage").addEventListener("change", (event) => {
   if (event.target.id === "preset") { $("agentModel").value = ""; showPreset(); }
-  if (event.target.id === "ocrMode") $("ocrBox").hidden = event.target.value !== "ocr";
 });
 $("settingsPage").addEventListener("click", async (event) => {
   const act = event.target.dataset.act; if (!act) return;
@@ -700,18 +725,19 @@ $("settingsPage").addEventListener("click", async (event) => {
   });
   if (act === "ocr-use") {
     const f = ocrFound[+event.target.dataset.i]; ocrChoice = f;
-    $("ocrUrl").value = f.kind === "server" ? f.base_url : ""; $("ocrModel").value = f.kind === "server" ? f.model : ""; $("ocrPath").value = f.kind === "tesseract" ? f.path : "";
-    $("ocrChosen").innerHTML = ocrName(f) + ' <span class="muted small">(premi «Salva e prova»)</span>';
+    $("ocrKind").value = f.kind; $("ocrUrl").value = f.kind === "server" ? f.base_url : ""; $("ocrModel").value = f.kind === "server" ? f.model : ""; $("ocrPath").value = f.kind === "tesseract" ? f.path : "";
+    say("ocrMsg", "Scelto " + f.name + ": premi «Salva e prova».");
   }
   if (act === "save-ocr") guard("ocrSaveMsg", async () => {
     const ocr = formOcr();
-    if (ocr.mode === "ocr" && !ocr.kind && !settings.ocr.kind) throw new Error("Prima scegli un OCR: premi «Cerca gli OCR sul computer».");
+    if (ocr.kind === "server" && (!ocr.base_url || !ocr.model)) throw new Error("Scrivi indirizzo e nome del modello, o scegli un OCR trovato.");
     say("ocrSaveMsg", "salvo e provo l'OCR…");
     settings = await post("/api/admin/settings", { ocr });
     ocrChoice = null;
-    ocrProbe = ocr.mode === "ocr" ? await post("/api/admin/ocr/test") : null;
+    ocrProbe = ocr.kind !== "minicpm" || settings.ocr_engine.status === "ready" ? await post("/api/admin/ocr/test") : null;
     renderSettings(); say("ocrSaveMsg", "Salvato."); refreshStatus();
   });
+  if (act === "ocr-install") guard("ocrSaveMsg", async () => { await post("/api/admin/ocr/install"); loadSettings(); });
   if (act === "save-index") guard("indexMsg", async () => { settings = await post("/api/admin/settings", { index: { concurrency: $("concurrency").value } }); renderSettings(); say("indexMsg", "Salvato."); });
   if (act === "retry") { await post("/api/admin/retry-errors").catch(() => {}); await refreshStatus(); loadSettings(); }
   if (act === "quit" && confirm("Chiudere LLMWiki? La lettura dei documenti in corso riprenderà al prossimo avvio.")) { await post("/api/admin/quit").catch(() => {}); document.body.innerHTML = '<p style="padding:40px">LLMWiki è stato chiuso. Puoi chiudere questa finestra.</p>'; }
@@ -729,6 +755,7 @@ $("space").addEventListener("change", async () => {
 });
 
 (async () => {
+  $("readAs").innerHTML = readingOptions("", true);
   await refreshStatus();
   await loadHistory();
   if (S && S.local && S.provider === "mock") { detected = (await api("/api/admin/detect").catch(() => ({ servers: [] }))).servers; renderWelcome(); }

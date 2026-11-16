@@ -123,7 +123,7 @@ def test_scanned_pdf_needs_the_ocr_and_says_where_to_choose_it(tmp_path):
         extract_lines(pdf)
     pages = []
     lines = extract_lines(pdf, FakeOcr(), lambda done, total: pages.append((done, total)))
-    assert pages == [(1, 2), (2, 2)]
+    assert pages == [(0, 2), (1, 2), (2, 2)]  # il totale si annuncia prima della prima pagina
     assert "=== Pagina 2 ===" in lines and any("letta dall'OCR numero 2" in line for line in lines)
 
 
@@ -154,7 +154,7 @@ def test_without_a_working_ocr_the_document_waits_instead_of_failing(tmp_path):
         wiki = Wiki(cfg)
         status = await wiki.indexer.run_once()
         assert status["ready"] == 1 and status["pending"] == 1 and status["error"] == 0
-        assert status["waiting_ocr"] and "Nessun OCR collegato" in status["waiting"]
+        assert status["waiting_ocr"] and "non è scaricato" in status["waiting"]  # MiniCPM-OCR
         await wiki.aclose()
 
         wiki = Wiki(cfg)  # OCR collegato ma spento a metà
@@ -164,6 +164,137 @@ def test_without_a_working_ocr_the_document_waits_instead_of_failing(tmp_path):
         await wiki.aclose()
 
     asyncio.run(scenario())
+
+
+def test_automatic_mode_uses_the_ocr_only_for_pdfs_without_text(tmp_path):
+    from test_extract import make_pdf
+
+    cfg = Config.from_dict({"llm": {"provider": "mock"}, "verify": {"judge": "llm"}}, tmp_path)  # "auto"
+    cfg.docs_dir.mkdir(parents=True)
+    make_pdf(cfg.docs_dir / "contratto.pdf", ["Contratto di fornitura n. 2026/014"])
+    scanned_pdf(cfg.docs_dir / "appunti.pdf")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.indexer.ocr = FakeOcr()
+        status = await wiki.indexer.run_once()
+        assert status["ready"] == 2
+        assert wiki.store.get_doc("contratto.pdf")["ocr"] == ""  # testo esatto, niente OCR
+        assert wiki.store.get_doc("appunti.pdf")["ocr"] == "OCR di prova"
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_each_document_can_be_read_its_own_way(tmp_path):
+    """Spazio in "solo testo esatto", ma un documento chiede l'OCR: vince il documento."""
+    cfg = ocr_cfg(tmp_path, mode="text")
+    cfg.docs_dir.mkdir(parents=True)
+    scanned_pdf(cfg.docs_dir / "appunti.pdf")
+
+    async def scenario():
+        wiki = Wiki(cfg)
+        wiki.indexer.ocr = FakeOcr()
+        status = await wiki.indexer.run_once()
+        assert status["error"] == 1 and "OCR" in wiki.store.get_doc("appunti.pdf")["error"]
+        wiki.store.set_method("appunti.pdf", "ocr")  # "Rileggi con MiniCPM-OCR"
+        status = await wiki.indexer.run_once()
+        assert status["ready"] == 1 and wiki.store.get_doc("appunti.pdf")["method"] == "ocr"
+        await wiki.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_reading_method_from_upload_and_from_the_document_card(tmp_path):
+    cfg = ocr_cfg(tmp_path, mode="text")
+    cfg.save()
+    pdf = tmp_path / "appunti.pdf"
+    scanned_pdf(pdf)
+    with TestClient(create_app(Wiki(Config.load(cfg.path))), **LOCAL) as client:
+        sent = client.post("/api/upload", data={"folder": "fisica", "method": "ocr"},
+                           files={"files": ("appunti.pdf", pdf.read_bytes(), "application/pdf")})
+        assert sent.status_code == 200 and sent.json()["saved"] == ["fisica/appunti.pdf"]
+        bad = client.post("/api/upload", data={"method": "boh"}, files={"files": ("a.pdf", b"x", "application/pdf")})
+        assert bad.status_code == 400
+        changed = client.post("/api/admin/doc-method", json={"doc": "fisica/appunti.pdf", "method": "text"})
+        assert changed.json()["method"] == "text"
+        assert client.post("/api/admin/doc-method", json={"doc": "manca.pdf", "method": "ocr"}).status_code == 404
+
+
+def test_strips_cut_between_lines_of_writing():
+    from PIL import Image, ImageDraw
+
+    page = Image.new("L", (600, 800), 255)
+    draw = ImageDraw.Draw(page)
+    lines = [60 + 90 * n for n in range(8)]  # righe di "scrittura" alte 30 px, spazi di 60 px
+    for top in lines:
+        draw.rectangle((40, top, 560, top + 30), fill=0)
+    buffer = io.BytesIO()
+    page.save(buffer, format="PNG")
+    pieces = [Image.open(io.BytesIO(piece)) for piece in ocr.strips(buffer.getvalue(), 4)]
+    assert len(pieces) == 4 and sum(p.height for p in pieces) == 800
+    edge = 0
+    for piece in pieces[:-1]:  # nessun taglio cade dentro una riga
+        edge += piece.height
+        assert not any(top <= edge <= top + 30 for top in lines)
+
+
+def test_minicpm_starts_on_the_gpu_if_there_is_room_else_on_the_cpu(tmp_path, monkeypatch):
+    from llmwiki import minicpm
+
+    for name, (size, _) in minicpm.MODEL_FILES.items():
+        with (tmp_path / name).open("wb") as handle:
+            handle.truncate(size)  # file della dimensione giusta, vuoti: bastano per "installato"
+    server = tmp_path / "programma" / "llama-server.exe"
+    server.parent.mkdir()
+    server.write_bytes(b"")
+    assert minicpm.installed(tmp_path)
+    tried, gpu = [], {"fails": False}
+
+    def fake_start(self, program, extra):
+        tried.append("gpu" if "99" in extra else "cpu")
+        self._client = ServerOcr("http://ocr.test/v1", "minicpm-ocr", transport=vision_server(), prompt=minicpm.PROMPT)
+        return tried[-1] == "cpu" or not gpu["fails"]
+
+    monkeypatch.setattr(minicpm.ManagedOcr, "_start", fake_start)
+    monkeypatch.setattr(minicpm.ManagedOcr, "_stop", lambda self: None)
+    for free, fails, expected in ((8000, False, ["gpu"]), (900, False, ["cpu"]), (8000, True, ["gpu", "cpu"])):
+        tried.clear()
+        gpu["fails"] = fails
+        monkeypatch.setattr(minicpm, "free_gpu_mb", lambda free=free: free)
+        engine = minicpm.ManagedOcr(tmp_path)
+        engine.read(ocr.sample_image())
+        assert tried == expected
+        assert engine.name.endswith("(processore)" if expected[-1] == "cpu" else "(scheda video)")
+        engine.close()
+
+
+def test_minicpm_download_is_verified_and_resumable(tmp_path, monkeypatch):
+    import hashlib
+    import zipfile
+
+    from llmwiki import minicpm
+
+    model, mmproj = b"modello finto", b"proiettore finto"
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("llama-server.exe", b"programma finto")
+    files = {"/m.gguf": model, "/p.gguf": mmproj, "/llama.zip": bundle.getvalue()}
+    monkeypatch.setattr(minicpm, "MODEL_FILES", {
+        "MiniCPM-OCR-1_0-Q8_0.gguf": (len(model), hashlib.sha256(model).hexdigest()),
+        "mmproj-model-f16-4x.gguf": (len(mmproj), hashlib.sha256(mmproj).hexdigest())})
+    monkeypatch.setattr(minicpm, "LLAMA_ZIP", ("https://x/llama.zip", len(files["/llama.zip"]),
+                                               hashlib.sha256(files["/llama.zip"]).hexdigest()))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = "/m.gguf" if "Q8_0" in request.url.path else "/p.gguf" if "mmproj" in request.url.path else "/llama.zip"
+        return httpx.Response(200, content=files[name])
+
+    install = minicpm.Install(tmp_path, client=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    install._run()
+    assert install.status()["status"] == "ready", install.state
+    assert (tmp_path / "programma" / "llama-server.exe").read_bytes() == b"programma finto"
+    assert not (tmp_path / "llama.cpp.zip").exists()
 
 
 def test_search_lists_what_reads_first(monkeypatch):

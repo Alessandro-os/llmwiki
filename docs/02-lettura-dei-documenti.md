@@ -48,36 +48,58 @@ Ogni documento ha uno stato:
 
 ### 2.2.1 PDF con l'OCR
 
-In Impostazioni → Lettura dei documenti, "Come leggere i PDF" è **Normale** (il testo che il
-PDF contiene, veloce) oppure **OCR** (per scansioni, appunti scritti a mano, formule). Vale per
-lo spazio, è `[ocr] mode` in `wiki.toml`, e solo per i PDF: gli altri formati non cambiano.
+Tre modi di leggere i PDF (Impostazioni → Lettura dei documenti, `[ocr] mode` in `wiki.toml`):
 
-L'app non dipende da un OCR preciso (`ocr.py`). Ne conosce due tipi:
+| Modo | Che cosa fa | Per |
+|---|---|---|
+| **Automatico** (predefinito) | Testo esatto se il PDF lo contiene; se non ne contiene (una scansione, appunti a mano), MiniCPM-OCR | quasi tutto |
+| **Testo esatto** | Solo il testo che il PDF contiene: perfetto e istantaneo. Un PDF senza testo va in errore, e il messaggio dice di scegliere l'OCR | PDF nati al computer (Word, slide, LaTeX) |
+| **MiniCPM-OCR** | Ogni pagina letta come immagine, anche se il PDF contiene testo | scansioni con un testo nascosto sbagliato, pagine miste |
+
+Il modo dello spazio vale per i documenti nuovi. Ogni documento può averne uno suo:
+- al caricamento, con "Come leggere i PDF";
+- dopo, con "Rileggi" nella sua scheda (colonna `method` di `state.db`; vuota = quello dello spazio).
+
+La pagina ha una leggenda su chi fa meglio che cosa, che riassume le misure del README.
+
+**MiniCPM-OCR gestito dall'app** (`minicpm.py`).
+
+Scelto il 16/11/2026 tra sei OCR, su 12 pagine vere di appunti. È il migliore tra quelli che non inventano:
+- sullo stampato è alla pari con Unlimited OCR 2, ma 30 volte più veloce;
+- a mano legge circa la metà delle parole.
+
+I modelli generici che vedono le immagini, come Strata, leggevano di più a mano, ma inventano frasi e numeri. Per questo non sono proposti.
+
+- **Scaricamento.** "Scarica (1,7 GB)" scarica il modello GGUF ufficiale (Q8_0) e la sua parte visiva da `openbmb/MiniCPM-OCR-1.0-gguf`, a revisione fissa. Scarica anche llama.cpp b12364 in versione Vulkan (36 MB), che usa la scheda video di qualunque marca. Ogni file è controllato con la sua impronta SHA-256, e lo scaricamento riprende se si interrompe. Tutto va in `%LOCALAPPDATA%\LLMWiki\ocr\minicpm-ocr`. In "Opzioni avanzate" si può indicare un `llama-server.exe` già installato.
+- **Accensione.** Alla prima pagina da leggere l'app avvia `llama-server`:
+  - sulla scheda video, se ha almeno 3 GB liberi: 2-3 s a pagina;
+  - altrimenti sul processore: 30-50 s a pagina, senza togliere memoria al modello che risponde;
+  - se sulla scheda video non parte, riprova sul processore.
+
+  Dopo 3 minuti senza pagine da leggere si spegne. La scheda del documento dice dove ha girato: «MiniCPM-OCR (processore)».
+- **Lettura a strisce.** Ogni pagina è tagliata in 4 strisce orizzontali, dove c'è meno inchiostro (`ocr.strips`), e le strisce sono lette una dopo l'altra. Su sei pagine di appunti a mano le parole giuste passano dal 37% al 45%. L'istruzione è quella ufficiale, `Text Recognition:`.
+- **Se manca.** Un PDF da leggere con l'OCR aspetta, e in basso a sinistra c'è scritto di scaricare MiniCPM-OCR. Appena è scaricato, la lettura riparte da sola.
+
+**Un altro OCR** (Opzioni avanzate). L'app non dipende da MiniCPM: si può collegare qualunque OCR (`ocr.py`).
 
 | Tipo | Che cos'è | Esempi |
 |---|---|---|
-| server | Un modello che legge immagini, servito con l'API compatibile OpenAI: riceve l'immagine della pagina e restituisce il testo | Unlimited OCR o DeepSeek-OCR con SGLang o vLLM; un modello con la vista su llama.cpp, Ollama, LM Studio, Strata |
-| tesseract | Il programma Tesseract installato sul computer | Tesseract 5 |
+| server | Un modello che legge immagini, con l'API compatibile OpenAI | Unlimited OCR, PaddleOCR-VL, DeepSeek-OCR con SGLang, vLLM o llama.cpp |
+| tesseract | Il programma Tesseract installato | Tesseract 5 |
 
-**"Cerca gli OCR sul computer"** fa per gli OCR quello che "Cerca i modelli accesi" fa per i
-modelli:
-1. interroga i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000);
-2. a ogni modello, fino a 6 per server e uno alla volta, manda un'immagine con la scritta
-   `CARNOT 1824`;
-3. cerca Tesseract nel PATH e nelle cartelle d'installazione consuete.
+"Cerca altri OCR sul computer":
+- interroga i server noti (8080, 8090, 11434, 1234, 8000, 30000, 10000);
+- prova ogni modello, fino a 6 per server, con un'immagine che contiene la scritta `CARNOT 1824`;
+- propone solo chi la legge davvero.
 
-Un OCR è proposto come funzionante solo se legge davvero la scritta: chi risponde senza vedere
-l'immagine compare con il motivo. "Usa questo", poi "Salva e prova" ripete la prova.
-
-Le pagine diventano immagini a 200 dpi (pypdfium2), una alla volta. Ogni pagina è un passo
-dell'avanzamento (2.9). Il testo letto segue la stessa strada di quello estratto: righe
-numerate e citabili. Ogni documento ricorda l'OCR che l'ha letto (colonna `ocr`), e la sua
-scheda lo dice.
-
-Se l'OCR non c'è, è spento o è occupato, i PDF **aspettano** come quando il modello è spento.
-In basso a sinistra compare il motivo, e l'app riprova da sola ogni minuto. Cambiando il modo
-di leggere i PDF, i documenti in errore ripartono da soli.
-
+**Per tutti gli OCR:**
+- le pagine diventano immagini a 200 dpi (pypdfium2), una alla volta;
+- ogni pagina, e per MiniCPM ogni striscia, fa avanzare la percentuale (2.9);
+- il testo letto diventa righe numerate e citabili, come quello estratto;
+- ogni documento ricorda l'OCR che l'ha letto (colonna `ocr`);
+- il testo arriva a pezzi, e se un tratto di 80 caratteri si ripete 4 volte la lettura si ferma (`ocr.loop_start`): alcuni OCR, davanti a pagine di soli disegni, ripetono la stessa riga all'infinito;
+- coordinate e segnali di impaginazione (Unlimited OCR, DeepSeek-OCR) vengono tolti (`ocr.clean_text`);
+- se l'OCR è spento o occupato, il documento aspetta e l'app riprova ogni minuto.
 Il testo viene poi normalizzato: le righe più lunghe di 240 caratteri sono spezzate tra una
 parola e l'altra, le righe vuote consecutive diventano una sola, le vuote in fondo spariscono.
 Righe corte servono a citare intervalli stretti.

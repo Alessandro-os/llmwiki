@@ -26,6 +26,7 @@ sopra.
       ├── llm.py                    interfaccia unica verso i modelli e ripieghi
       ├── store.py                  file su disco + SQLite (stato, albero, ricerca, cronologia)
       ├── extract.py ── ocr.py      da file a righe numerate · qualunque OCR (server o Tesseract)
+      │       └── minicpm.py        MiniCPM-OCR gestito dall'app: scaricamento, accensione, strisce
       ├── prompts.py                tutti i prompt di sistema
       ├── config.py                 wiki.toml: voci, predefiniti, lettura e scrittura
       ├── update.py ── download.py  aggiornamenti da GitHub · scaricamento verificato (anche nli.py)
@@ -88,7 +89,7 @@ spazi veri.
 | `test_backends.py` | I due protocolli contro server finti: strumenti, giudice senza logprob, parametri facoltativi rifiutati da Claude, server spento non scambiato per server senza logprob |
 | `test_independence.py` | Modello che rifiuta o ignora gli strumenti, modalità testuale forzata, contesto piccolo, lettura che aspetta il modello invece di fallire, chiave sbagliata segnalata senza riprovare all'infinito |
 | `test_app.py` | Configurazione, spazi, persone e impostazioni dall'interfaccia, qualunque fornitore, avanzamento in diretta, cronologia e approfondimenti, amministrazione solo locale, chiavi fuori dallo spazio, cascata del decision model |
-| `test_ocr.py` | OCR contro server finti: lettura, errori come per i modelli, prova con l'immagine nota, ricerca (prima chi legge), PDF scansionato con OCR e senza, documento in attesa se l'OCR manca o è spento, impostazioni dall'interfaccia; Tesseract vero se installato |
+| `test_ocr.py` | OCR contro server finti: lettura, errori come per i modelli, prova con l'immagine nota, ricerca (prima chi legge), PDF scansionato con OCR e senza, documento in attesa se l'OCR manca o è spento, impostazioni dall'interfaccia; modo automatico e modo per documento (caricamento, "Rileggi"); strisce che non tagliano le righe; ripetizioni interrotte; MiniCPM-OCR sulla scheda video o sul processore e scaricamento verificato; Tesseract vero se installato |
 | `test_update.py` | Aggiornamenti contro un GitHub finto: versione nuova, nessuna novità, rete assente, impronta sbagliata (file cancellato, niente installazione), pulizia degli installatori usati |
 | `test_evals.py` | Coerenza dei file del banco di prova; il decision model mantiene la qualità misurata (se installato) |
 
@@ -169,5 +170,5 @@ Il numero di versione sta in due posti da tenere uguali: `pyproject.toml` e
 usa" e "per chi sviluppa". Le cose in sospeso stanno in `DA_FARE.md`.
 
 Il progetto sta su GitHub in un repository privato, `Alessandro-os/llmwiki`. Ogni versione ha
-la sua etichetta (`v0.4.1`) e una release con l'installatore e lo zip.
+la sua etichetta (`v0.5.0`) e una release con l'installatore e lo zip.
 `.github/workflows/ci.yml` esegue lint e test a ogni caricamento.

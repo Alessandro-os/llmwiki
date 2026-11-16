@@ -1,6 +1,6 @@
 [project]
 name = "llmwiki"
-version = "0.4.1"
+version = "0.5.0"
 description = "LLM wiki ad albero di riassunti: indicizzazione parallela, citazioni verificate, server condiviso e MCP"
 requires-python = ">=3.11"
 dependencies = [

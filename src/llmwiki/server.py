@@ -33,7 +33,7 @@ from .llm import LLMError, make_llm
 from .mcp_server import build_mcp
 from .ocr import make_ocr
 from .ocr import probe as probe_ocr
-from .store import norm_path
+from .store import METHODS, norm_path, sha_file
 from .tools import ToolError
 
 log = logging.getLogger("llmwiki.server")
@@ -44,7 +44,7 @@ EDITABLE = {
     "llm": {"provider", "base_url", "api_key_env", "agent_model", "summary_model", "judge_model",
             "send_reasoning_effort", "agent_effort", "summary_effort", "tool_mode", "context_tokens"},
     "index": {"concurrency", "fanout"},
-    "ocr": {"mode", "kind", "base_url", "model", "api_key_env", "path", "language"},
+    "ocr": {"mode", "kind", "llama_server", "base_url", "model", "api_key_env", "path", "language"},
     "verify": {"enabled", "judge", "threshold"},
     "server": {"host", "port"},
 }
@@ -131,8 +131,8 @@ def apply_settings(cfg: Config, patch: dict) -> None:
         raise ValueError("la soglia deve stare tra 0 e 1")
     if not 1 <= cfg.index.concurrency <= 64 or not 2 <= cfg.index.fanout <= 64:
         raise ValueError("parallelismo tra 1 e 64, ampiezza dei gruppi tra 2 e 64")
-    if cfg.ocr.mode not in ("text", "ocr") or cfg.ocr.kind not in ("", "server", "tesseract"):
-        raise ValueError("ocr.mode: text oppure ocr; ocr.kind: server oppure tesseract")
+    if cfg.ocr.mode not in ("auto", "text", "ocr") or cfg.ocr.kind not in ("minicpm", "server", "tesseract"):
+        raise ValueError("ocr.mode: auto, text oppure ocr; ocr.kind: minicpm, server oppure tesseract")
     if cfg.server.host not in LOOPBACK and not cfg.server.users:
         raise ValueError("per condividere in rete crea prima almeno un utente")
 
@@ -153,6 +153,7 @@ def _settings(hub: Hub) -> dict:
         "providers": PROVIDERS,
         "keys": _saved_keys(),
         "judge_model": hub.download.status(),
+        "ocr_engine": hub.ocr_install.status(cfg.ocr.llama_server),
         "active_judge": hub.wiki.agent.verifier.judge_name,
         "docs_dir": str(cfg.docs_dir),
         "config_file": str(cfg.path or ""),
@@ -207,7 +208,7 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
     async def summary(doc: str) -> dict:
         text = hub.wiki.tools.read_summary(doc)
         row = hub.wiki.store.get_doc(norm_path(doc))
-        read = {key: row[key] for key in ("model", "seconds", "read_at", "ocr")} if row else {}
+        read = {key: row[key] for key in ("model", "seconds", "read_at", "ocr", "method")} if row else {}
         return {"doc": doc, "text": text, "read": read}
 
     @app.get("/api/document")
@@ -219,7 +220,11 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
         return hub.wiki.tools.search(q, folder, limit)
 
     @app.post("/api/upload")
-    async def upload(files: list[UploadFile] = File(...), folder: str = Form("")) -> dict:
+    async def upload(files: list[UploadFile] = File(...), folder: str = Form(""),
+                     method: str = Form("")) -> dict:
+        """`method`: come leggerli ("" = come dice lo spazio, "auto", "text", "ocr")."""
+        if method not in METHODS:
+            raise ValueError(f"modo di lettura non valido: {method!r}")
         wiki = hub.wiki
         saved, rejected = [], []
         for item in files:
@@ -235,6 +240,10 @@ def _wiki_routes(app: FastAPI, hub: Hub) -> None:
                 while block := await item.read(1 << 20):
                     handle.write(block)
             os.replace(tmp, target)
+            if method:  # il documento entra subito in coda con il suo modo di lettura
+                stat = target.stat()
+                wiki.store.upsert_pending(relative, sha_file(target), stat.st_size, stat.st_mtime)
+                wiki.store.set_method(relative, method)
             saved.append(relative)
         if saved:
             wiki.indexer.trigger()  # parte subito, anche se un'indicizzazione è già in corso
@@ -440,6 +449,22 @@ def _reading_routes(app: FastAPI, hub: Hub) -> None:
     async def resume_reading() -> dict:
         hub.wiki.indexer.resume()
         return hub.wiki.indexer.status()
+
+    @app.post("/api/admin/doc-method")
+    async def doc_method(body: dict) -> dict:
+        """Rilegge un documento con il modo indicato ("Rileggi con…" nella sua scheda)."""
+        path = norm_path(str(body.get("doc", "")))
+        if hub.wiki.store.get_doc(path) is None:
+            raise ToolError(f"documento non trovato: {path}")
+        hub.wiki.store.set_method(path, str(body.get("method", "")))
+        hub.wiki.indexer.trigger()
+        return {"doc": path, "method": hub.wiki.store.get_doc(path)["method"]}
+
+    @app.post("/api/admin/ocr/install")
+    async def ocr_install() -> dict:
+        """Scarica MiniCPM-OCR e llama.cpp (circa 1,7 GB): i PDF in attesa ripartono da soli."""
+        hub.ocr_install.start()
+        return hub.ocr_install.status(hub.wiki.cfg.ocr.llama_server)
 
     @app.post("/api/admin/update")
     async def update_app() -> dict:

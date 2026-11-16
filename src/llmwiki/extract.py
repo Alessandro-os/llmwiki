@@ -23,6 +23,10 @@ class ExtractError(Exception):
     pass
 
 
+class NoTextError(ExtractError):
+    """Il file non contiene testo (una scansione, appunti a mano): nel modo automatico si passa all'OCR."""
+
+
 def is_supported(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED
 
@@ -49,7 +53,7 @@ def extract_lines(path: Path, ocr=None, on_page=None) -> list[str]:
         raise ExtractError(f"formato non supportato: {ext}")
     lines = _normalize(raw)
     if not any(line.strip() and not line.startswith("=== Pagina") for line in lines):
-        raise ExtractError(NO_TEXT)
+        raise NoTextError(NO_TEXT)
     return lines
 
 
@@ -76,7 +80,7 @@ def _pdf(path: Path) -> str:
         has_text = has_text or bool(text.strip())
         parts.append(f"=== Pagina {number} ===\n{text}")
     if not has_text:  # solo immagini: senza questo controllo resterebbero i soli numeri di pagina
-        raise ExtractError(NO_TEXT)
+        raise NoTextError(NO_TEXT)
     return "\n\n".join(parts)
 
 
@@ -88,6 +92,7 @@ def _pdf_ocr(path: Path, ocr, on_page) -> str:
     document = pypdfium2.PdfDocument(str(path))
     try:
         total, parts = len(document), []
+        on_page(0, total)  # il totale si sa subito: l'avanzamento può partire dalla prima pagina
         for number in range(total):
             image = document[number].render(scale=ocr.dpi / 72).to_pil()
             buffer = io.BytesIO()

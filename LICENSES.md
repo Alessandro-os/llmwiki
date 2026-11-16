@@ -26,6 +26,8 @@ stata scelta: va decisa prima di distribuirlo fuori dalla cerchia di chi lo sta 
 | Componente | Licenza | Origine |
 |---|---|---|
 | mDeBERTa-v3-base-xnli-multilingual-nli-2mil7 (decision model) | MIT | Hugging Face, `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`, revisione `b5113eb3` |
+| MiniCPM-OCR 1.0, GGUF Q8_0 e parte visiva (OCR) | Apache-2.0 | Hugging Face, `openbmb/MiniCPM-OCR-1.0-gguf`, revisione `0133ad8d` |
+| llama.cpp b12364, versione Vulkan (fa girare MiniCPM-OCR) | MIT | GitHub, `ggml-org/llama.cpp`, release `b12364` |
 
 Gli OCR (Tesseract, Unlimited OCR o altri) non fanno parte di LLMWiki: l'app usa quelli già
 installati o accesi sul computer, ognuno con la sua licenza.

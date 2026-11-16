@@ -13,7 +13,7 @@ import os
 import re
 import secrets
 
-from . import apphome, nli, ocr
+from . import apphome, minicpm, nli, ocr
 from .agent import Answer, WikiAgent
 from .config import Config
 from .indexer import Indexer
@@ -185,6 +185,7 @@ class Hub:
         self.wiki = wiki
         self.registry = registry  # presente solo nell'app desktop, che gestisce più spazi
         self.download = nli.Download()
+        self.ocr_install = minicpm.Install(configured_server=wiki.cfg.ocr.llama_server)
         self._judge: nli.NliJudge | None = wiki.agent.verifier.nli
         self._lock = asyncio.Lock()
         self._running = False

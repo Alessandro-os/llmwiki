@@ -1,6 +1,6 @@
 # Cronologia delle versioni
 
-## Prossima versione
+## 0.5.0 · 2026-11-16
 
 Per chi la usa:
 
@@ -9,12 +9,22 @@ Per chi la usa:
   messo. Un tasto "Ferma la lettura" la interrompe, "Riprendi" la fa ripartire.
 - Ogni documento ricorda quale modello l'ha letto, in quanto tempo e quando: lo dice la sua
   scheda in Documenti.
-- OCR per i PDF scansionati e gli appunti scritti a mano, con qualunque OCR. In Impostazioni
-  → Lettura dei documenti si sceglie "Normale" o "OCR". "Cerca gli OCR sul computer" trova da
-  solo i server OCR accesi (Unlimited OCR, DeepSeek-OCR, modelli che vedono le immagini su
-  llama.cpp, Ollama, LM Studio, Strata) e Tesseract, e propone solo quelli che leggono
-  davvero un'immagine di prova. Ogni documento ricorda quale OCR l'ha letto. Se l'OCR è
-  spento, i PDF aspettano invece di finire in errore.
+- Scansioni e appunti scritti a mano: si sceglie con che cosa leggere i PDF.
+  - **Automatico** (predefinito): testo esatto se il PDF lo contiene, MiniCPM-OCR se è una
+    scansione.
+  - **Testo esatto**: per i PDF fatti al computer.
+  - **MiniCPM-OCR**: per scansioni e appunti a mano.
+
+  La scelta vale per lo spazio, e si può cambiare per ogni documento: al caricamento, o dopo
+  con "Rileggi". Una leggenda ricorda chi fa meglio che cosa.
+- MiniCPM-OCR si scarica con un clic (1,7 GB, impronte controllate). L'app lo accende da sola
+  sulla scheda video se c'è posto (2-3 s a pagina), altrimenti sul processore, senza togliere
+  memoria al modello che risponde, e lo spegne quando ha finito. È stato scelto su 12 pagine
+  vere di appunti, tra sei OCR: è il migliore tra quelli che non inventano.
+- In "Opzioni avanzate" si può collegare un altro OCR qualunque: "Cerca altri OCR sul
+  computer" propone solo quelli che leggono davvero un'immagine di prova. Ogni documento
+  ricorda quale OCR l'ha letto e dove ha girato. Se l'OCR non c'è o è spento, i PDF aspettano
+  invece di finire in errore.
 - Tasto Aggiorna: a ogni avvio l'app controlla su GitHub se c'è una versione nuova e, se c'è,
   lo mostra in basso a destra nella pagina principale. Premendolo scarica la versione nuova,
   ne controlla l'impronta, si chiude e si riapre aggiornata, senza lasciare file della
@@ -36,6 +46,12 @@ Per chi sviluppa:
   `/ocr/test`, colonna `ocr` in `docs`. Dipendenza nuova: pypdfium2 (pagine PDF come
   immagini). `LOCAL_SERVERS` aggiunge llama.cpp 8090 e SGLang 30000 e 10000. Test in
   `tests/test_ocr.py`.
+- `minicpm.py` (`Install`, `ManagedOcr`: scaricamento verificato, llama-server acceso sulla
+  scheda video o sul processore, spento dopo 3 minuti di inattività), `ocr.strips` (pagina a
+  strisce), `ocr.loop_start` (freno alle ripetizioni, testo in stream), `ocr.clean_text`
+  (coordinate e segnali di Unlimited OCR e DeepSeek-OCR). `[ocr] mode` = `auto | text | ocr`,
+  `kind` = `minicpm | server | tesseract`, `llama_server`. Colonna `method` in `docs` e rotta
+  `/api/admin/doc-method`; `/api/upload` accetta `method`; rotta `/api/admin/ocr/install`.
 - `update.py` (`Updater`: controllo su GitHub, scaricamento, installazione silenziosa) e
   `download.py` (`fetch_verified`, ora usato anche da `nli.Download`). Rotta
   `/api/admin/update`; `/api/status` aggiunge `update` nell'app desktop. Installatore:

@@ -83,4 +83,8 @@ In ordine di importanza, secondo me.
     ipotesi), così si segue ogni biforcazione che serve.
 - [ ] Modalità "interrogami": l'app genera domande dagli appunti di una cartella e controlla
   le tue risposte sui testi.
-- [ ] OCR per i PDF scansionati (oggi vengono segnalati come non leggibili).
+- [ ] **Provare la versione Vulkan di llama.cpp** che l'app scarica per MiniCPM-OCR: velocità
+  sulla scheda video rispetto alla versione CUDA misurata (2-3 s a pagina). Non l'ho potuta
+  provare: scaricare ed eseguire il programma era bloccato nella sessione di sviluppo.
+- [ ] **Scrittura a mano:** MiniCPM-OCR ne legge circa metà. Da riprovare quando escono OCR
+  migliori; Unlimited OCR non è stato misurato a mano (si è incastrato sulla prima pagina).

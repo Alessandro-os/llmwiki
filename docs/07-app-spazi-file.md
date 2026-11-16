@@ -124,6 +124,7 @@ Documenti\LLMWiki\Personale\
 ├── secrets.json       chiavi dei servizi online
 ├── models\mdeberta-v3-nli\   decision model (model.onnx, tokenizer.json)
 ├── aggiornamenti\     installatore della versione nuova, finché non è installata
+├── ocr\minicpm-ocr\   MiniCPM-OCR (modello, parte visiva, llama.cpp), se scaricato
 └── logs\llmwiki.log
 ```
 

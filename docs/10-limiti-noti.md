@@ -2,7 +2,7 @@
 
 [← Indice](README.md)
 
-Che cosa l'app non fa o non garantisce nella versione 0.4.1. Gli sviluppi possibili sono in
+Che cosa l'app non fa o non garantisce nella versione 0.5.0. Gli sviluppi possibili sono in
 `DA_FARE.md`.
 
 ## Non provato
@@ -31,11 +31,17 @@ Che cosa l'app non fa o non garantisce nella versione 0.4.1. Gli sviluppi possib
 
 ## Documenti
 
-- **PDF scansionati.** Si leggono solo con un OCR collegato (Impostazioni → Lettura dei
-  documenti), e solo i PDF: le immagini sciolte (.png, .jpg) non vengono lette. La qualità è
-  quella dell'OCR scelto: Tesseract va bene con il testo stampato, non con formule e scrittura
-  a mano. L'OCR non viene applicato di nuovo ai documenti già letti cambiando il modo:
-  solo a quelli nuovi o in errore.
+- **Scansioni e appunti a mano.**
+  - **Formati:** si leggono con l'OCR solo i PDF; le immagini sciolte (.png, .jpg) no.
+  - **Scrittura a mano:** MiniCPM-OCR ne legge circa la metà delle parole (45% su sei pagine
+    di prova). Il resto esce storpiato, in modo riconoscibile: le citazioni su quelle righe di
+    solito non vengono confermate.
+  - **Scaricamento:** serve scaricare 1,7 GB la prima volta.
+  - **Velocità:** senza scheda video libera, 30-50 secondi a pagina.
+  - **Non verificato:** la versione Vulkan di llama.cpp scaricata dall'app non è stata provata
+    su questo PC; le misure sono state fatte con la versione CUDA.
+  - **Cambio di modo:** cambiando il modo dello spazio, i documenti già letti non si rileggono
+    da soli; si rileggono uno per uno con "Rileggi".
 - **Immagini, tabelle complesse, formule in immagine** dentro PDF e Word non vengono lette.
   Delle tabelle Word si legge il testo delle celle.
 - **Fogli di calcolo e presentazioni** (`.xlsx`, `.pptx`) non sono supportati; i `.csv` sì.

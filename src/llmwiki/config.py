@@ -19,7 +19,7 @@ SECTIONS = ("llm", "index", "ocr", "verify", "agent", "server")
 NOTES = {
     "llm": "provider: anthropic | openai (qualunque server compatibile: Strata, Ollama, LM Studio) | mock",
     "index": "concurrency: richieste al modello in parallelo; fanout: elementi riassunti da ogni nodo",
-    "ocr": "mode: text (testo del PDF) | ocr; kind: server (modello che legge immagini) | tesseract",
+    "ocr": "mode: auto | text (testo del PDF) | ocr; kind: minicpm | server (altro OCR) | tesseract",
     "verify": "judge: auto | nli | llm; threshold: confidenza minima per accettare una citazione",
     "agent": "max_steps: letture al massimo per domanda; explorers: sotto-agenti in parallelo",
     "server": "host 0.0.0.0 espone l'app in rete (serve almeno un utente in [server.users])",
@@ -60,10 +60,14 @@ class IndexConfig:
 
 @dataclass
 class OcrConfig:
-    # Come leggere i PDF: "text" prende il testo che il file contiene; "ocr" legge ogni pagina
-    # come immagine con l'OCR scelto (scansioni, appunti scritti a mano, formule).
-    mode: str = "text"
-    kind: str = ""          # "server": un modello che legge immagini (API OpenAI) | "tesseract"
+    # Come leggere i PDF: "auto" prende il testo che il file contiene e, se non ce n'è (una
+    # scansione, appunti a mano), passa all'OCR; "text" solo il testo del file; "ocr" sempre l'OCR.
+    # Un documento può avere il suo modo (colonna `method` di state.db), che vince su questo.
+    mode: str = "auto"
+    # "minicpm": MiniCPM-OCR gestito dall'app (minicpm.py); "server": un altro OCR acceso su un
+    # server con API OpenAI; "tesseract": Tesseract installato
+    kind: str = "minicpm"
+    llama_server: str = ""  # kind "minicpm": un llama-server.exe già installato, al posto di scaricarlo
     base_url: str = ""      # kind "server"
     model: str = ""         # kind "server"
     api_key_env: str = ""   # kind "server": variabile con la chiave, se il server la chiede

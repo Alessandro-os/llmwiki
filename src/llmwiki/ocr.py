@@ -51,6 +51,7 @@ class Ocr:
 
     def __init__(self, dpi: int = 200) -> None:
         self.dpi = dpi
+        self.page_fraction = 0.0  # quanta parte della pagina in lettura è fatta (per l'avanzamento)
 
     def read(self, png: bytes) -> str:
         raise NotImplementedError
@@ -61,12 +62,13 @@ class Ocr:
 
 class ServerOcr(Ocr):
     def __init__(self, base_url: str, model: str, api_key: str = "", dpi: int = 200,
-                 timeout: float = 600.0, transport=None) -> None:
+                 timeout: float = 600.0, transport=None, prompt: str = "") -> None:
         import httpx
 
         super().__init__(dpi)
         self.name = model
         self.base_url, self.model = base_url.rstrip("/"), model
+        self.prompt = prompt or PROMPT  # gli OCR specializzati vogliono la loro ("Text Recognition:")
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._http = httpx.Client(timeout=timeout, headers=headers, transport=transport)
 
@@ -76,7 +78,7 @@ class ServerOcr(Ocr):
         image = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
         body = {"model": self.model, "temperature": 0, "max_tokens": 4096, "stream": True, "messages": [
             {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image}},
-                                         {"type": "text", "text": PROMPT}]}]}
+                                         {"type": "text", "text": self.prompt}]}]}
         try:
             with self._http.stream("POST", self.base_url + "/chat/completions", json=body) as response:
                 self._check(response)
@@ -131,6 +133,30 @@ _BOX_TAGS = re.compile(r"<\|ref\|>.*?<\|/ref\|>|<\|det\|>.*?<\|/det\|>|<(?:PAGE|
 _BOX_PREFIX = re.compile(r"^[a-z_]+\[\d+(?:,\s*\d+){3}\]", re.M)
 
 
+def strips(png: bytes, parts: int = 4) -> list[bytes]:
+    """Taglia la pagina in strisce orizzontali, dove c'è meno inchiostro (le righe di testo
+    restano intere). Gli OCR piccoli sono fatti per leggere pezzi di pagina: MiniCPM-OCR su sei
+    pagine di appunti a mano passa dal 37% al 45% di parole giuste (misura del 16/11)."""
+    import numpy as np
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(png))
+    gray = np.asarray(image.convert("L"), dtype=np.int16)
+    ink = (gray < 110).sum(axis=1)  # inchiostro scuro: la quadrettatura chiara non conta
+    height = gray.shape[0]
+    window, rows = height // (parts * 3), [0]
+    for k in range(1, parts):
+        low = max(rows[-1] + 50, height * k // parts - window)
+        high = min(height - 50, height * k // parts + window)
+        rows.append(low + int(np.argmin(ink[low:high])) if high > low else height * k // parts)
+    pieces = []
+    for top, bottom in zip(rows, [*rows[1:], height]):
+        buffer = io.BytesIO()
+        image.crop((0, top, image.width, bottom)).save(buffer, format="PNG")
+        pieces.append(buffer.getvalue())
+    return pieces
+
+
 LOOP_SPAN, LOOP_TIMES = 80, 4
 
 
@@ -174,6 +200,10 @@ class TesseractOcr(Ocr):
 
 def make_ocr(cfg: OcrConfig) -> Ocr | None:
     """L'OCR collegato nelle impostazioni, o None se non ce n'è uno."""
+    if cfg.kind == "minicpm":
+        from .minicpm import ManagedOcr  # qui per non legare i due moduli all'avvio
+
+        return ManagedOcr(configured_server=cfg.llama_server, dpi=cfg.dpi)
     if cfg.kind == "server" and cfg.base_url and cfg.model:
         key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
         return ServerOcr(cfg.base_url, cfg.model, key, cfg.dpi)
